@@ -1,0 +1,3 @@
+# ignore the dataset (as it's too big)
+data/*
+0\ Original\ Resources/*
