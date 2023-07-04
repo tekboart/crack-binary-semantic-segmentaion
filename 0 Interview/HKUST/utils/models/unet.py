@@ -13,6 +13,7 @@ class DoubleConv(nn.Module):
             1. out_channels: the #channels of the output (i.e., a 4DTensor)
         '''
         # TODO: I think this class could be inside the main model (as a func): @staticmethod def double_conv(in_chennels, out_channels) = nn.Sequential(...)
+        # !!!But it must be used int the __init__ of the model's Class so cannot use it before defining it right??
         super().__init__()
         self.conv = nn.Sequential(
             # padding = 1 means 'same' conv
@@ -38,14 +39,12 @@ class DoubleConv(nn.Module):
         '''
         return self.conv(x)
 
-class UnetEncoder(nn.Module):
-    pass
 
 class UnetScratch(nn.Module):
     '''
     A UNET v1 (original) model, built from scratch
     '''
-    def __init__(self, in_channels: int = 3, num_classes: int = 1, num_channels: list = [64, 128, 256, 512]):
+    def __init__(self, in_channels: int = 3, num_classes: int = 1, num_channels: list = (64, 128, 256, 512)):
         '''
 
         args:
@@ -122,7 +121,7 @@ class UnetScratch(nn.Module):
 
                 # make sure the two tensors have the same H & W
                 # note that we must change the HxW of the skip_connection (as seen in the UNET arch image) (Aladdin resized the decoder part)
-                if x.shape == skip_connection.shape:
+                if x.shape != skip_connection.shape:
                     # method 1: using Center Cropping (from Torchvision) (might lose useful info)
                     # skip_connections_cropped = TF.CenterCrop(x.shape[2:])(skip_connection)
                     # method 2: add padding
@@ -131,13 +130,17 @@ class UnetScratch(nn.Module):
 
 
                 # used dim=1 as the input is channel_first
-                x = torch.concat((skip_connections_cropped, x), dim=1)
+                x = torch.cat((skip_connections_cropped, x), dim=1)
 
         # do the 1x1Conv
         x = self.network_in_network(x)
 
         return x
 
+
+###############################################################################
+# For testing
+###############################################################################
 def test(input_shape: tuple):
     '''
     Test wether out model works correctly
@@ -154,6 +157,7 @@ def test(input_shape: tuple):
 
     print(f'{"input image shape:":<30} {str(img.shape):>10}')
     print(f'{"output image  shape:":<30} {str(yhat.shape):>10}')
+
 
 if __name__ == '__main__':
     test((32, 3, 160, 160))
