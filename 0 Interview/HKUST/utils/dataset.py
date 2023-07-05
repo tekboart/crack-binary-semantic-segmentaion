@@ -4,6 +4,10 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import torchvision
 
+import albumentations as A
+# import albumentations.augmentations.functional as F
+from albumentations.pytorch import ToTensorV2
+
 import numpy as np
 from PIL import Image
 
@@ -23,7 +27,7 @@ class SegmentaionDataset(Dataset):
         img_ext: str = "jpg",
         mask_ext: str = "png",
         mask_suffix: str = "_mask",
-        transform = None,
+        transform=None,
         num_classes: int = 1,
     ):
         super().__init__()
@@ -54,14 +58,21 @@ class SegmentaionDataset(Dataset):
             ),
         )
 
+        # NumPy implementation (channels_last format)
         # we used np.array, as opposed to PIL, as it will be converted to other formats (e.g., torch.Tensor) much easier
         # TODO: as numpy cannot run on GPU maybe it's better to use pure torch tensors instead.
+        # TODO: why we define each element in channels_last format???
         # .convert('RGB') as img is RGB (3 channels)
         image = np.array(Image.open(img_path).convert("RGB"))
+        # make channels_first
+        # image = np.moveaxis(image, -1, 0)
+        # print('img shape', image.shape)
         # .convert('L') as mask is grayscale
         mask = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
+        # print('mask shape', mask.shape)
         # (H, W) --> (C=1, H, W) (an img must be 3darray not matrix)
-        mask = np.expand_dims(mask, 0)
+        # mask = np.expand_dims(mask, 0)
+        # print('mask shape', mask.shape)
         if self.num_classes == 1:
             # We need 0/1 for each pixel (not 0.0 or 255.), this is needed for sigmoid/softmax fn.
             mask = np.where(mask == 255.0, 1.0, mask)
@@ -70,39 +81,75 @@ class SegmentaionDataset(Dataset):
             # in each channel pixels must be either 0 or 1 (0: is_not_class_obj, 1:is_class_obj)
             pass
 
+        # # PyTorch implementation (channels_first format)
+        # image = torchvision.io.read_image(img_path, torchvision.io.ImageReadMode.RGB).float()
+        # # print('img shape', image.shape)
+        # mask = torchvision.io.read_image(mask_path, torchvision.io.ImageReadMode.GRAY).float()
+        # # print('mask shape', mask.shape)
+
+        # if self.num_classes == 1:
+        #     # We need 0/1 for each pixel (not 0.0 or 255.), this is needed for sigmoid/softmax fn.
+        #     mask = torch.where(mask == 255.0, 1.0, mask)
+        # elif self.num_classes > 1:
+        #     # convert a gray img with pixel values [0,1,..,C] to a (C, H, W) 3Dtensor
+        #     # in each channel pixels must be either 0 or 1 (0: is_not_class_obj, 1:is_class_obj)
+        #     pass
+
         if self.transform:
             augmentations = self.transform(image=image, mask=mask)
-            if isinstance(augmentations, (list, tuple)):
-                image = augmentations[0]
-                mask = augmentations[1]
-            elif isinstance(augmentations, dict):
-                image = augmentations.get("image")
-                mask = augmentations.get("mask")
+            image = augmentations.get("image")
+            # print('augmentations image:', augmentations['image'].shape)
+            mask = augmentations.get("mask")
+            # print('augmentations mask:', augmentations['mask'].shape)
+            # print('type mask', augmentations['mask'].__class__)
+
+        # make the image, mask channels_first
+        # if not using alumentations's ToTensorV2 (in self.transform), which caused error and shape mismatch
+        image = np.moveaxis(image, -1, 0)
+        # print('image shape', image.shape)
+        mask = np.expand_dims(mask, 0)
+        # print('mask shape', mask.shape)
 
         return image, mask
 
 
 def get_loaders(
-        train_img_dir,
-        train_mask_dir,
-        val_img_dir,
-        val_mask_dir,
-        batch_size,
-        train_transform,
-        val_transform,
-        num_workers: int = 4,
-        pin_memory: bool = True,
+    train_img_dir,
+    train_mask_dir,
+    val_img_dir,
+    val_mask_dir,
+    batch_size,
+    train_transform,
+    val_transform,
+    num_workers: int = 4,
+    pin_memory: bool = True,
 ):
     # create our datasets
-    train_ds = SegmentaionDataset(image_dir=train_img_dir, mask_dir=train_mask_dir, transform=train_transform)
-    val_ds = SegmentaionDataset(image_dir=val_img_dir, mask_dir=val_mask_dir, transform=val_transform)
+    train_ds = SegmentaionDataset(
+        image_dir=train_img_dir, mask_dir=train_mask_dir, transform=train_transform, mask_suffix='_mask',
+    )
+    val_ds = SegmentaionDataset(
+        image_dir=val_img_dir, mask_dir=val_mask_dir, transform=val_transform, mask_suffix='_mask',
+    )
 
     # Preparing your data for training with DataLoaders
     # 1. ass samples in “minibatches”
     # 2. reshuffle the data at every epoch to reduce model overfitting (only for train set)
     # 3. use Python’s multiprocessing to speed up data retrieval
-    train_dataloader = DataLoader(train_ds, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=True)
-    val_dataloader = DataLoader(val_ds, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=False)
+    train_dataloader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        shuffle=True,
+    )
+    val_dataloader = DataLoader(
+        val_ds,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        shuffle=False,
+    )
 
     return train_dataloader, val_dataloader
 

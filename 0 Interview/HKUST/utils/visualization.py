@@ -90,19 +90,31 @@ def plot_segmentation_inference(img_batch, mask_batch, yhat_mask_batch, limit: i
     fig, axes = plt.subplots(batch_size, 3, figsize=(30, 10))
 
     if batch_size == 1:
-        axes[0].imshow(img_batch[0])
-        axes[0].set_title('Image', fontsize=16)
-        axes[1].imshow(yhat_mask_batch[0], cmap='gray')
-        axes[1].set_title('Mask (predicted)', fontsize=16)
-        axes[2].imshow(mask_batch[0], cmap='gray')
-        axes[2].set_title('Mask (target)', fontsize=16)
+        img = img_batch[0]
+        yhat_mask = yhat_mask_batch[0]
+        mask = mask_batch[0]
+        axes[0].imshow(img)
+        axes[0].set_title(f'Image {[*img.shape]}', fontsize=16)
+        axes[0].axis('off')
+        axes[1].imshow(yhat_mask, cmap='gray')
+        axes[1].set_title(f'Mask (predicted) {[*yhat_mask.shape]}', fontsize=16)
+        axes[1].axis('off')
+        axes[2].imshow(mask, cmap='gray')
+        axes[2].set_title(f'Mask (target) {[*mask.shape]}', fontsize=16)
+        axes[2].axis('off')
     elif batch_size > 1:
         for row in range(batch_size):
-            axes[row][0].imshow(img_batch[row])
-            axes[row][0].set_title('Image', fontsize=16)
-            axes[row][1].imshow(yhat_mask_batch[row], cmap='gray')
-            axes[row][1].set_title('Mask (predicted)', fontsize=16)
-            axes[row][2].imshow(mask_batch[row], cmap='gray')
-            axes[row][2].set_title('Mask (target)', fontsize=16)
+            img = img_batch[row]
+            yhat_mask = yhat_mask_batch[row]
+            mask = mask_batch[row]
+            axes[row][0].imshow(img)
+            axes[row][0].set_title(f'Image {[*img.shape]}', fontsize=16)
+            axes[row][0].axis('off')
+            axes[row][1].imshow(yhat_mask, cmap='gray')
+            axes[row][1].set_title(f'Mask (predicted) {[*yhat_mask.shape]}', fontsize=16)
+            axes[row][1].axis('off')
+            axes[row][2].imshow(mask, cmap='gray')
+            axes[row][2].set_title(f'Mask (target) {[*mask.shape]}', fontsize=16)
+            axes[row][2].axis('off')
 
     plt.show()
