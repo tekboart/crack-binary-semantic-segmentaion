@@ -96,6 +96,8 @@ class SegmentaionDataset(Dataset):
         #     pass
 
         if self.transform:
+            # This implementation works with transfomrs that input both img and mask (and return both)
+            # e.g., alumentations and/or torchvision transformers
             augmentations = self.transform(image=image, mask=mask)
             image = augmentations.get("image")
             # print('augmentations image:', augmentations['image'].shape)
@@ -104,7 +106,8 @@ class SegmentaionDataset(Dataset):
             # print('type mask', augmentations['mask'].__class__)
 
         # make the image, mask channels_first
-        # if not using alumentations's ToTensorV2 (in self.transform), which caused error and shape mismatch
+        # Only if not using alumentations's ToTensorV2 (in self.transform)
+        # which automatically reshape's the img, mask for pytorch models (caused error and shape mismatch)
         image = np.moveaxis(image, -1, 0)
         # print('image shape', image.shape)
         mask = np.expand_dims(mask, 0)
@@ -114,28 +117,18 @@ class SegmentaionDataset(Dataset):
 
 
 def get_loaders(
-    train_img_dir,
-    train_mask_dir,
-    val_img_dir,
-    val_mask_dir,
+    train_ds: Dataset,
+    val_ds: Dataset,
     batch_size,
-    train_transform,
-    val_transform,
     num_workers: int = 4,
     pin_memory: bool = True,
 ):
-    # create our datasets
-    train_ds = SegmentaionDataset(
-        image_dir=train_img_dir, mask_dir=train_mask_dir, transform=train_transform, mask_suffix='_mask',
-    )
-    val_ds = SegmentaionDataset(
-        image_dir=val_img_dir, mask_dir=val_mask_dir, transform=val_transform, mask_suffix='_mask',
-    )
-
-    # Preparing your data for training with DataLoaders
-    # 1. ass samples in “minibatches”
-    # 2. reshuffle the data at every epoch to reduce model overfitting (only for train set)
-    # 3. use Python’s multiprocessing to speed up data retrieval
+    '''
+    Preparing your data for training with DataLoaders
+    1. put samples in “minibatches”
+    2. reshuffle the data at every epoch to reduce model overfitting (only for train set)
+    3. use Python’s multiprocessing to speed up data retrieval
+    '''
     train_dataloader = DataLoader(
         train_ds,
         batch_size=batch_size,
