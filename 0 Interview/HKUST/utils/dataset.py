@@ -1,15 +1,18 @@
 import os
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Sampler, Subset
 import torchvision
 
 import albumentations as A
+
 # import albumentations.augmentations.functional as F
 from albumentations.pytorch import ToTensorV2
 
 import numpy as np
 from PIL import Image
+
+from typing import Union
 
 
 # TODO: where is the shuffle part? maybe in DataLoader
@@ -18,6 +21,13 @@ from PIL import Image
 class SegmentaionDataset(Dataset):
     """
     # TODO: add docstring
+
+    Parameters
+    ----------
+    subset: tuple|list
+        Set the start and end indices, to avoid
+        >>> SegmentationDataset(image_dir, mask_dir, subset=[0, 10])
+        takes only 10 samples to create the dataset (i.e., [0:10])
     """
 
     def __init__(
@@ -29,11 +39,16 @@ class SegmentaionDataset(Dataset):
         mask_suffix: str = "_mask",
         transform=None,
         num_classes: int = 1,
+        subset: Union[tuple, list] = None,
     ):
         super().__init__()
         self.image_dir = image_dir
         self.mask_dir = mask_dir
-        self.images = os.listdir(image_dir)
+        self.images = (
+            os.listdir(image_dir)
+            if not subset
+            else os.listdir(image_dir)[subset[0] : subset[1]]
+        )
         self.img_ext = img_ext
         self.mask_ext = mask_ext
         self.mask_suffix = mask_suffix
@@ -116,6 +131,35 @@ class SegmentaionDataset(Dataset):
         return image, mask
 
 
+class DatasetSampler(Sampler):
+    """
+    a custom sampler for the dataset loader avoiding recreating the dataset
+        just creating a new loader for each different sampling.
+
+
+    Examples
+    --------
+    >>> trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+    >>>                                     download=True, transform=transform)
+
+    >>> sampler1 = YourSampler(your_mask)
+    >>> sampler2 = YourSampler(your_other_mask)
+    >>> trainloader_sampler1 = torch.utils.data.DataLoader(trainset, batch_size=4,
+    >>>                                         sampler = sampler1, shuffle=False, num_workers=2)
+    >>> trainloader_sampler2 = torch.utils.data.DataLoader(trainset, batch_size=4,
+    >>>                                         sampler = sampler2, shuffle=False, num_workers=2)
+    """
+
+    def __init__(self, mask):
+        self.mask = mask
+
+    def __iter__(self):
+        return (self.indices[i] for i in torch.nonzero(self.mask))
+
+    def __len__(self):
+        return len(self.mask)
+
+
 def get_loaders(
     train_ds: Dataset,
     val_ds: Dataset,
@@ -123,12 +167,12 @@ def get_loaders(
     num_workers: int = 4,
     pin_memory: bool = True,
 ):
-    '''
+    """
     Preparing your data for training with DataLoaders
     1. put samples in “minibatches”
     2. reshuffle the data at every epoch to reduce model overfitting (only for train set)
     3. use Python’s multiprocessing to speed up data retrieval
-    '''
+    """
     train_dataloader = DataLoader(
         train_ds,
         batch_size=batch_size,
