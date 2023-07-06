@@ -76,9 +76,10 @@ def train_fn(
         # we use float16 to reduce VRAM and MEM usage
         with torch.cuda.amp.autocast():
             predictions = model(data)
-
             # must check the shape of preds and target masks before giving them to loss_fn
             assert predictions.shape == targets.shape
+
+            # calc the loss
             loss = loss_fn(predictions, targets)
 
         # calc eval metrics (for training)
@@ -89,6 +90,7 @@ def train_fn(
         # backprop
         # init all grads az zero/0
         optimizer.zero_grad()
+        # prevent underflow of very small loss values
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
@@ -126,6 +128,7 @@ def validation_fn(
     # probab to set training=False, so do only forward
     model.eval()
 
+    # Don't cache values for backprop (ME)
     with torch.no_grad():
         for x, y in loader:
             # load our x:data, y:targets to device's MEM (e.g., GPU VRAM)
@@ -152,7 +155,7 @@ def validation_fn(
             # method 1: (didn't work)
             # dice_score += (2 * (preds * y).sum()) / (preds + y).sum() + 1e-8
             # method 2
-            dice_score += metrics_fn['dice'](preds, y)
+            dice_score += metrics_fn["dice"](preds, y)
 
     accu = num_correct / num_pixels
     dice = dice_score / len(loader)
@@ -171,8 +174,11 @@ def train_model(
     epochs: int,
     lr: float = 0.001,
     device: str = "cuda:0",
+    save_model: bool = False,
+    save_checkpoint_path: str = None,
+    save_checkpoint_name: str = None,
     load_model: bool = False,
-    checkpoint_path: str = None,
+    load_checkpoint_path: str = None,
     metrics: tuple = (),
     metrics_fn: dict = {},
 ):
@@ -186,41 +192,54 @@ def train_model(
 
     # load weights a pretrained model
     if load_model:
-        load_checkpoint(torch.load(checkpoint_path), model)
+        load_checkpoint(torch.load(load_checkpoint_path), model)
 
+    # To prevent underflow in grads by scaling the loss
+    # when precision lvl (e.g., Float16) cannot represent very small numbers
     scaler = torch.cuda.amp.GradScaler()
 
     for epoch in range(epochs):
         # create dict from metrics list/tuple
         metrics = dict.fromkeys(metrics, 0)
-        metrics = train_fn(
+
+        # Start training iterations (for this epoch)
+        print(" Training Phase (In Progress) ".center(79, "-"))
+        train_metrics = train_fn(
             train_loader, model, optimizer, loss_fn, scaler, metrics, metrics_fn, device
         )
 
-        # eval metrics (for training)
-        print(f" epoch {epoch}'s metric(s) (training) ".center(79, "-"))
-        for key, value in metrics.items():
+        # plot the validation metrics
+        print(f" epoch {epoch}'s metric(s) (training) ".center(79, "."))
+        for key, value in train_metrics.items():
             print(f"{key:<10} {value.item():>5.2f}")
-        # print("-" * 79)
+        # print(" Training Phase (Done) ".center(79, "-"))
 
         if val_loader:
-            # eval metrics (for validation)
             # TODO: use metrics dict (but with 'val_' prefix) to automate things
-            val_accu, val_dice = validation_fn(val_loader, model, metrics_fn=metrics_fn, device=device)
-            print(f" epoch {epoch}'s metric(s) (validation) ".center(79, "-"))
+            print(" Validation Phase (In Progress) ".center(79, "-"))
+
+            val_accu, val_dice = validation_fn(
+                val_loader, model, metrics_fn=metrics_fn, device=device
+            )
+
+            # plot the validation metrics
+            print(f" epoch {epoch}'s metric(s) (validation) ".center(79, "."))
             print(f'{"val_accuracy:":<10} {val_accu.item():>5.2f}')
             print(f'{"val_dice:":<10} {val_dice.item():>5.2f}')
-            print("-" * 79)
+            # print(" Validation Phase (Done) ".center(79, "-"))
 
             # print some examples to a folder
 
     # save the trained model
-    checkpoint = {
-        "state_dict": model.state_dict(),
-        "optimizer": optimizer.state_dict(),
-    }
+    if save_model:
+        checkpoint = {
+            "state_dict": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+        }
 
-    save_checkpoint(checkpoint, dirname="./models/")
+        save_checkpoint(checkpoint, dirname=save_checkpoint_path, filename=save_checkpoint_name)
+
+    #
 
 
 # TODO: write a main fn for pytorch-lightning
