@@ -23,7 +23,7 @@ class DoubleConv(nn.Module):
 
     Examples
     --------
-    x = DoubleConv(in_channels=64, out_channels=128)(x)
+    >>> x = DoubleConv(in_channels=64, out_channels=128)(x)
     """
 
     def __init__(self, in_channels: int, out_channels: int):
