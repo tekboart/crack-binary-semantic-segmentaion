@@ -83,6 +83,7 @@ class UnetScratch(nn.Module):
         in_channels: int = 3,
         num_classes: int = 1,
         num_channels: list = (64, 128, 256, 512),
+        from_logits: bool = True,
     ):
         """
 
@@ -97,6 +98,7 @@ class UnetScratch(nn.Module):
         self.in_channels = in_channels
         self.num_classes = num_classes
         self.num_channels = num_channels
+        self.from_logits = from_logits
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         # we must use nn.ModuleList or nn.ModuleDict as opposed to a normal list/dict (to use e.g., .eval())
         self.encoder = nn.ModuleList()
@@ -225,13 +227,11 @@ class UnetScratch(nn.Module):
         x = self.network_in_network(x)
 
         # TODO: add the act_fn for final layer
-        # if you add a sigmoid/softmax here the loss_fn must not use from_logits
-        # if self.num_classes == 1:
-        #     # apply sigmoid
-        #     pass
-        # else:
-        #     # apply softmax
-        #     pass
+        if not self.from_logits:
+            if self.num_classes == 1:
+                x = torch.sigmoid(x)
+            elif self.num_classes > 1:
+                x = torch.softmax(x)
 
         return x
 
