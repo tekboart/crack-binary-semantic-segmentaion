@@ -39,7 +39,7 @@ def dice_binary_segment(
     # calc 2 * |A ∩ B| / |A| + |B|
     dice = (2.0 * intersection + smooth) / (summation + smooth)
 
-    return 1 - dice
+    return dice
 
 
 def jaccard_binary_segment(
@@ -77,7 +77,7 @@ def jaccard_binary_segment(
 
     jaccard = (intersection + smooth) / (union + smooth)
 
-    return 1 - jaccard
+    return jaccard
 
 
 def accuracy_binary_segment(
