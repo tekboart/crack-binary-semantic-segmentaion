@@ -56,6 +56,7 @@ def train_fn(
     optimizer,
     loss_fn,
     scaler,
+    from_logits: bool,
     metrics: dict = {},
     metrics_fn: dict = {},
     device: str = "cuda:0",
@@ -87,7 +88,7 @@ def train_fn(
         # calc eval metrics (for training)
         for key in metrics:
             if eval_fn := metrics_fn.get(key):
-                metrics[key] += eval_fn(predictions, targets).item()
+                metrics[key] += eval_fn(predictions, targets, from_logits).item()
 
         # backprop
         # init all grads az zero/0
@@ -105,7 +106,7 @@ def train_fn(
         loop.set_postfix(loss=batch_loss)
 
     # add the loss (of this epoch) to metrics
-    metrics['loss'] = epoch_loss_cum
+    metrics["loss"] = epoch_loss_cum
 
     for key in metrics:
         # divide all metrics by the #steps/batches
@@ -113,12 +114,13 @@ def train_fn(
 
     return metrics
 
+
 # TODO: This should work standalone (for evaluation of test data)
 def validation_fn(
     loader,
     model,
+    from_logits: bool,
     num_classes: int = 1,
-    from_logits: bool = True,
     thresh: float = 0.5,
     metrics: dict = {},
     metrics_fn: dict = {},
@@ -166,7 +168,7 @@ def validation_fn(
             # method 1: (didn't work)
             # dice_score += (2 * (preds * y).sum()) / (preds + y).sum() + 1e-8
             # method 2
-            dice_score += metrics_fn["dice"](preds, y)
+            dice_score += metrics_fn["dice"](preds, y, from_logits)
 
     accu = num_correct / num_pixels
     dice = dice_score / len(loader)
@@ -183,6 +185,7 @@ def train_model(
     train_loader,
     val_loader,
     epochs: int,
+    from_logits: bool,
     lr: float = 0.001,
     device: str = "cuda:0",
     save_model: bool = False,
@@ -198,7 +201,14 @@ def train_model(
     """
     # TODO: add the needed hyperparameters as args to this func (is more versatile)
     model = model.to(device)
-    loss_fn = nn.BCEWithLogitsLoss()
+
+    # set the loss function
+    if from_logits:
+        loss_fn = nn.BCEWithLogitsLoss()
+    else:
+        loss_fn = nn.BCELoss()
+
+    # set the optimizer
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     # load weights a pretrained model
@@ -211,7 +221,7 @@ def train_model(
 
     # init the train metrcis (e.g., val_loss, val_dice, etc.)
     # we add 'loss' separately as it's not part of metrics
-    history = {'loss': []}
+    history = {"loss": []}
     # add other metrics (if any)
     for key in metrics:
         history[key] = []
@@ -220,7 +230,7 @@ def train_model(
     if val_loader:
         val_keys = []
         for key in history:
-            val_keys.append(f'val_{key}')
+            val_keys.append(f"val_{key}")
         for key in val_keys:
             history[key] = []
 
@@ -229,13 +239,25 @@ def train_model(
         # create/reset metrics values to 0 (for each epoch)
         metrics = dict.fromkeys(metrics, 0)
 
+        # TODO: do lr decay here
+        # the train_model fn can take a list of callbacks (like keras)
+        # e.g., [lr_decay, early_stop]
+
         # Start training iterations (for this epoch)
         # print(" Training Phase (In Progress) ".center(79, "-"))
         train_metrics = train_fn(
-            train_loader, model, optimizer, loss_fn, scaler, metrics, metrics_fn, device
+            train_loader,
+            model,
+            optimizer,
+            loss_fn,
+            scaler,
+            from_logits,
+            metrics,
+            metrics_fn,
+            device,
         )
 
-        # plot the validation metrics
+        # plot the validation metrics + save to history (dict)
         # print(f" epoch {epoch}'s metric(s) (training) ".center(79, "."))
         print()
         for key, value in train_metrics.items():
@@ -248,15 +270,15 @@ def train_model(
             # print(" Validation Phase (In Progress) ".center(79, "-"))
 
             val_accu, val_dice = validation_fn(
-                val_loader, model, metrics_fn=metrics_fn, device=device
+                val_loader, model, from_logits, metrics_fn=metrics_fn, device=device
             )
 
             # plot the validation metrics
             # print(f" epoch {epoch}'s metric(s) (validation) ".center(79, "."))
             print(f'{"val_accuracy:":<15} {val_accu.item():>5.2f}')
             print(f'{"val_dice:":<15} {val_dice.item():>5.2f}')
-            history['val_accuracy'].append(val_accu.item())
-            history['val_dice'].append(val_dice.item())
+            history["val_accuracy"].append(val_accu.item())
+            history["val_dice"].append(val_dice.item())
             # print(" Validation Phase (Done) ".center(79, "-"))
 
             # print some examples to a folder
@@ -268,7 +290,9 @@ def train_model(
             "optimizer": optimizer.state_dict(),
         }
 
-        save_checkpoint(checkpoint, dirname=save_checkpoint_path, filename=save_checkpoint_name)
+        save_checkpoint(
+            checkpoint, dirname=save_checkpoint_path, filename=save_checkpoint_name
+        )
 
     #
 
