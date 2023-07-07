@@ -55,11 +55,8 @@ def torch_tensor_for_plt(
         tensor = tensor.moveaxis(channel_axis, -1)
 
     if to_numpy:
-        if isinstance(tensor, torch.Tensor):
-            # use detach() if tensor requires grad
-            tensor.detach().numpy()
-        elif isinstance(tensor, tf.Tensor):
-            tensor.numpy()
+        # use detach() if tensor requires grad
+        tensor.detach().cpu().numpy()
 
     return tensor
 
