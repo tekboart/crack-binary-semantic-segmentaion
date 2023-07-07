@@ -35,9 +35,9 @@ def dice_binary_segment(
     # calc |A ∩ B|
     intersection = (preds * targets).sum().float()
     # calc |A| + |B|
-    sum = (preds + targets).sum()
+    summation = (preds + targets).sum()
     # calc 2 * |A ∩ B| / |A| + |B|
-    dice = (2.0 * intersection + smooth) / (sum + smooth)
+    dice = (2.0 * intersection + smooth) / (summation + smooth)
 
     return 1 - dice
 
