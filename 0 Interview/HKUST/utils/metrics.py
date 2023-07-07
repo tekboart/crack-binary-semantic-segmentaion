@@ -3,32 +3,107 @@ import torch
 
 # TODO: maybe create a class for each custom eval metrics and set a __str__ if we print it
 # we can subclass pytorch lighnting's TensorMetric to implement metrics
-# This class handles automated DDP syncing and converts all inputs and outputs to tensors.
+# as this subclass handles automated DDP syncing and converts all inputs and outputs to tensors.
 
 
-# TODO: first create FP, FN, etc then use them to calc diff metrics: accuracy, recall, precision, etc.
+def dice_binary_segment(
+    preds: torch.Tensor, targets: torch.Tensor, from_logits: bool, smooth: float = 1.0
+) -> int:
+    """
+    Calculate the dice metric (aka Sørensen–Dice coefficient) for binary segmentation
 
+    Parameters
+    ----------
+    preds: torch.Tensor
+    targets: torch.Tensor
+    from_logits: bool
+    smooth: float, optional
 
-def dice_segment(pred, target):
-    # TODO: the values are not in range [0, 1]
-    # I think we must apply act_func(pred)
-    smooth = 1.0
-    num = pred.size(0)
-    m1 = pred.view(num, -1).float()  # Flatten
-    m2 = target.view(num, -1).float()  # Flatten
-    intersection = (m1 * m2).sum().float()
-
-    return (2.0 * intersection + smooth) / (m1.sum() + m2.sum() + smooth)
-
-
-# TODO: create accu eval metric BOn dice_coeff (above)
-def accuracy_segment(preds, targets, from_logits: bool = True, thresh: float = 0.5):
+    Returns
+    -------
+    int
+        The binary segmentation dice for a batch of images.
+    """
     if from_logits:
         preds = torch.sigmoid(preds)
 
-    # make pixel values for predictions binary
-    # a pixel is either part of a class or not
-    # use .float() to have 0.0/1.0 as our data are of type float not int
+    # flatten label and prediction tensors
+    preds = preds.view(-1).float()
+    targets = targets.view(-1).float()
+
+    # calc |A ∩ B|
+    intersection = (preds * targets).sum().float()
+    # calc |A| + |B|
+    sum = (preds + targets).sum()
+    # calc 2 * |A ∩ B| / |A| + |B|
+    dice = (2.0 * intersection + smooth) / (sum + smooth)
+
+    return 1 - dice
+
+
+def jaccard_binary_segment(
+    preds: torch.Tensor, targets: torch.Tensor, from_logits: bool, smooth: float = 1.0
+) -> int:
+    """
+    Calculate the Jaccard metric (aka IOU) for binary segmentation
+
+    Parameters
+    ----------
+    preds: torch.Tensor
+    targets: torch.Tensor
+    from_logits: bool
+    smooth: float, optional
+
+    Returns
+    -------
+    int
+        The binary segmentation jaccard for a batch of images.
+    """
+    if from_logits:
+        preds = torch.sigmoid(preds)
+
+    # flatten label and prediction tensors
+    preds = preds.view(-1).float()
+    targets = targets.view(-1).float()
+
+    intersection = (preds * targets).sum().float()
+    dice = (2.0 * intersection + smooth) / (preds.sum() + targets.sum() + smooth)
+
+    # calc |A ∩ B|
+    intersection = (preds * targets).sum().float()
+    # calc |A| + |B|
+    total = (preds + targets).sum()
+    # calc |A ∪ B| = |A| + |B| - |A ∩ B|
+    union = total - intersection
+
+    jaccard = (intersection + smooth) / (union + smooth)
+
+    return 1 - jaccard
+
+
+def accuracy_binary_segment(
+    preds, targets, from_logits: bool, thresh: float = 0.5
+) -> int:
+    """
+    Calculate the accuracy for binary segmentation
+
+    Parameters
+    ----------
+    preds: torch.Tensor
+    targets: torch.Tensor
+    from_logits: bool
+        Define whether the preds are logits or an activation_fn (e.g., sigmoid) has been applied to it.
+    thresh: float, optional
+
+    Returns
+    -------
+    int
+        The binary segmentation accuracy for a batch of images.
+    """
+    if from_logits:
+        preds = torch.sigmoid(preds)
+
+    # make each pixel values binary (0 or 1)
     preds = (preds > thresh).float()
     # calc #pixels in this img_batch that were classified correctly
     num_correct_pixels = (preds == targets).sum()
