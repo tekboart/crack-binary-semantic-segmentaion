@@ -16,7 +16,7 @@ def img_to_inference_tensor(
     size: tuple[int, int] = None,
     data_format: str = "channels_first",
 ):
-    '''
+    """
     Take an image path (str) and output a torch.Tensor (ready for inference).
 
 
@@ -25,7 +25,7 @@ def img_to_inference_tensor(
 
     size: tuple[int, int]
         A shape to resize the image up/down. (height, width)
-    '''
+    """
     # TODO: instead of PIL use pure torch:
     # from torchvision.io import read_image, ImageReadMode
     # img = read_image('dog.jpeg', mode=ImageReadMode.GRAY)
@@ -48,9 +48,9 @@ def img_to_inference_tensor(
     if make_batch:
         img_tensor = img_tensor.unsqueeze(dim=0)
 
-    if data_format == 'channels_last' and make_batch:
+    if data_format == "channels_last" and make_batch:
         img_tensor = img_tensor.moveaxis(1, -1)
-    elif data_format == 'channels_last' and not make_batch:
+    elif data_format == "channels_last" and not make_batch:
         img_tensor = img_tensor.moveaxis(0, -1)
 
     return img_tensor
@@ -81,6 +81,7 @@ def inference_segmentation(
     data_format: str = "channels_first",
     normalize: bool = True,
     preprocess_func: Callable = None,
+    device: str = "cpu",
 ):
     """
     Passes an image to a segmentation model and returns its predicted mask Tensor.
@@ -109,6 +110,8 @@ def inference_segmentation(
     if len(img_batch.shape) == 3:
         img_batch = img_batch.unsqueeze(dim=0)
 
+    # move it to the same device as the models', to avoid RuntimeError
+    img_batch = img_batch.to(device)
     yhat = model(img_batch)
 
     # construct the final mask (a gray img)
