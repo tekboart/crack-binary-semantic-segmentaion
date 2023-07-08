@@ -17,16 +17,16 @@ def save_checkpoint(
     if verbose:
         print(" Saving Checkpoint (In progress) ".center(79, "-"))
 
-    if not filename and not utc_tz:
+    if filename:
+        filename = f"{dirname}{filename}.pth.tar"
+    elif not filename and not utc_tz:
         # get the date+time (of currect TimeZone)
         time = datetime.today().strftime("%Y.%m.%d@%H-%M-%S")
+        filename = f"{dirname}{time}@model_checkpoint.pth.tar"
     elif not filename and utc_tz:
         # get the date+time (of UTC TimeZone)
         time = datetime.utcnow().strftime("%Y-%m-%d %H-%M-%S")
-
-        filename = f"{dirname}{time}-model_checkpoint.pth.tar"
-    else:
-        filename = f"{dirname}{filename}.pth.tar"
+        filename = f"{dirname}{time}@model_checkpoint.pth.tar"
 
     torch.save(state, filename)
     if verbose:
