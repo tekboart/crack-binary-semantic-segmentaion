@@ -8,7 +8,7 @@ class SegmentaionDataset(Dataset):
     """
     # TODO: add docstring
 
-    Parameters
+    Attributes
     ----------
     subset: tuple|list
         Set the start and end indices, to avoid
@@ -16,6 +16,9 @@ class SegmentaionDataset(Dataset):
         takes only 10 samples to create the dataset (i.e., [0:10])
     data_format: st
         define whether the final (img, mask) be channels_first (default) or channels_last
+
+    Methods
+    -------
     """
 
     def __init__(
