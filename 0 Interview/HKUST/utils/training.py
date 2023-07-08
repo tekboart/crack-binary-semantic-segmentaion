@@ -7,14 +7,15 @@ from typing import Union
 
 
 def save_checkpoint(
-    state, dirname: str = "", filename: str = None, utc_tz: bool = False
+    state, dirname: str = "", filename: str = None, utc_tz: bool = False, verbose: bool = False
 ) -> None:
     """
     Save the trained model's state (aka checkpoint)
     """
     from datetime import datetime
 
-    print(" Saving Checkpoint (In progress) ".center(79, "-"))
+    if verbose:
+        print(" Saving Checkpoint (In progress) ".center(79, "-"))
 
     if not filename and not utc_tz:
         # get the date+time (of currect TimeZone)
@@ -28,12 +29,13 @@ def save_checkpoint(
         filename = f"{dirname}{filename}.pth.tar"
 
     torch.save(state, filename)
-    print(f"\nCheckpoint was saved as: {filename}\n")
+    if verbose:
+        print(f"\nCheckpoint was saved as: {filename}\n")
 
-    print(" Saving Checkpoint (Done) ".center(79, "-"))
+        print(" Saving Checkpoint (Done) ".center(79, "-"))
 
 
-def load_checkpoint(checkpoint, model) -> None:
+def load_checkpoint(checkpoint, model, verbose: bool = False) -> None:
     """
     Load the weights from a the trained model's checkpoint to another model.
 
@@ -43,11 +45,13 @@ def load_checkpoint(checkpoint, model) -> None:
         A previously saved model checkpoint (e.g., using torch.save())
         e.g., my_checkpoint.pth.tar
     """
-    print(" Loading Checkpoint (In progress) ".center(79, "-"))
+    if verbose:
+        print(" Loading Checkpoint (In progress) ".center(79, "-"))
 
     model.load_state_dict(checkpoint["state_dict"])
 
-    print(" Loading Checkpoint (Done) ".center(79, "-"))
+    if verbose:
+        print(" Loading Checkpoint (Done) ".center(79, "-"))
 
 
 def train_fn(
@@ -375,7 +379,7 @@ def train_model(
             "optimizer": optimizer.state_dict(),
         }
 
-        save_checkpoint(checkpoint, dirname=save_model_path, filename=save_model_name)
+        save_checkpoint(checkpoint, dirname=save_model_path, filename=save_model_name, verbose=True)
         del checkpoint
 
     return history
