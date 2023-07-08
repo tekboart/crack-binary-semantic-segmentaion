@@ -2,31 +2,30 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
-
+from tqdm import tqdm
 from typing import Union
 
-import os
-from tqdm import tqdm
 
-# load my custom Classes/Functions/etc.
-# from utils.metrics import check_accuracy, dice_coeff
-
-
-def save_checkpoint(state, dirname: str = "", filename: str = None) -> None:
+def save_checkpoint(
+    state, dirname: str = "", filename: str = None, utc_tz: bool = False
+) -> None:
     """
-    Save the trained model (aka checkpoint)
+    Save the trained model's state (aka checkpoint)
     """
     from datetime import datetime
 
     print(" Saving Checkpoint (In progress) ".center(79, "-"))
 
-    if not filename:
+    if not filename and not utc_tz:
         # get the date+time (of currect TimeZone)
         time = datetime.today().strftime("%Y.%m.%d@%H-%M-%S")
+    elif not filename and utc_tz:
         # get the date+time (of UTC TimeZone)
-        # time = datetime.utcnow().strftime('%Y-%m-%d %H-%M-%S')
+        time = datetime.utcnow().strftime("%Y-%m-%d %H-%M-%S")
 
         filename = f"{dirname}{time}-model_checkpoint.pth.tar"
+    else:
+        filename = f"{dirname}{filename}.pth.tar"
 
     torch.save(state, filename)
     print(f"\nCheckpoint was saved as: {filename}\n")
@@ -36,7 +35,7 @@ def save_checkpoint(state, dirname: str = "", filename: str = None) -> None:
 
 def load_checkpoint(checkpoint, model) -> None:
     """
-    Load the weights from a the trained model to another model.
+    Load the weights from a the trained model's checkpoint to another model.
 
     Parameters
     ----------
@@ -57,8 +56,7 @@ def train_fn(
     optimizer,
     loss_fn,
     scaler,
-    from_logits: bool,
-    metrics: list,
+    metrics: dict,
     metrics_fn: dict,
     epoch: int,
     device: str = "cuda:0",
@@ -92,7 +90,7 @@ def train_fn(
         # calc train metrics for this mini_batch
         for key in metrics:
             if eval_fn := metrics_fn.get(key):
-                metrics[key] += eval_fn(yhat, y, from_logits).item()
+                metrics[key] += eval_fn(yhat, y).item()
 
         # backprop
         # init all grads az zero/0
@@ -125,7 +123,6 @@ def validation_fn(
     loader,
     model,
     loss_fn,
-    from_logits: bool,
     metrics: dict,
     metrics_fn: dict,
     device: str = "cuda",
@@ -166,7 +163,7 @@ def validation_fn(
             for key in metrics:
                 # used split() to remove 'val_' part of key
                 if eval_fn := metrics_fn.get(key.split("_")[1]):
-                    metrics[key] += eval_fn(yhat, y, from_logits).item()
+                    metrics[key] += eval_fn(yhat, y).item()
 
     # add the val_loss (of this epoch) to metrics
     metrics["val_loss"] = epoch_val_loss_cum
@@ -176,7 +173,7 @@ def validation_fn(
         metrics[key] /= num_val_batches
 
     # TODO: why this line?
-    # probab to set training=True (for future training)
+    # probab to set training=True (to continue training in next epoch)
     model.train()
 
     return metrics
@@ -184,6 +181,10 @@ def validation_fn(
 
 # TODO: create a class with fit(), evaluate(), predict() methods
 class BinarySegmentationModel(nn.Module):
+    """
+    A Class model to do train, evaluation, & predict (like keras models).
+    """
+
     def __init__(
         self,
         model,
@@ -215,7 +216,9 @@ class BinarySegmentationModel(nn.Module):
         self.load_model = load_model
         self.load_checkpoint_path = load_checkpoint_path
         self.metrics = metrics
-        self.metrics_fn = metrics_fn  # TODO: can make it universal (no need to input it to the class.__init__)
+        # TODO: can make it universal (no need to input it to the class.__init__)
+        # TODO: even better, can be the input of def compile(self, optimizer, losses=[], metrics=[]):
+        self.metrics_fn = metrics_fn
 
 
 def train_model(
@@ -227,17 +230,18 @@ def train_model(
     lr: float = 0.001,
     device: str = "cuda:0",
     save_model: bool = False,
-    save_checkpoint_path: str = None,
-    save_checkpoint_name: str = None,
+    save_model_path: str = "",
+    save_model_name: str = None,
+    save_model_temp: bool = False,
+    save_model_temp_path: str = "",
     load_model: bool = False,
     load_checkpoint_path: str = None,
-    metrics: Union[tuple[str], list[str]] = (),
     metrics_fn: dict = {},
 ):
     """
     Do the training for several epoch (written in pure PyTorch)
     """
-    # TODO: add the needed hyperparameters as args to this func (is more versatile)
+    # TODO: add the needed hyperparameters (e.g., lr_decay_step) as args to this func (is more versatile)
     model = model.to(device)
 
     # set the loss function
@@ -249,7 +253,7 @@ def train_model(
     # set the optimizer
     optimizer = optim.Adam(model.parameters(), lr=lr)
     # set learning schedualer
-    scheduler = StepLR(optimizer, step_size=5, gamma=0.5)
+    scheduler = StepLR(optimizer, step_size=10, gamma=0.5)
 
     # load weights a pretrained model
     if load_model:
@@ -263,14 +267,16 @@ def train_model(
     # we add 'loss' separately as it's not part of metrics
     history = {"loss": []}
     # add other metrics (if any)
-    for key in metrics:
+    for key in metrics_fn:
         history[key] = []
 
     # init the val metrcis (e.g., val_loss, val_dice, etc.)
     if val_loader:
         val_keys = []
+        # create metrics with 'val_' prefix (e.g., val_loss)
         for key in history:
             val_keys.append(f"val_{key}")
+        # init val_<metric> in history:dict
         for key in val_keys:
             history[key] = []
 
@@ -278,64 +284,89 @@ def train_model(
     for epoch in range(epochs):
         print(f" epoch {epoch+1}/{epochs} ".center(79, "-"))
         # create/reset metrics values to 0 (for each epoch)
-        train_metrics_init = dict.fromkeys(metrics, 0)
+        train_metrics_init = dict.fromkeys(metrics_fn, 0)
 
         # Start training iterations (for this epoch)
-        # print(" Training Phase (In Progress) ".center(79, "-"))
         train_metrics = train_fn(
             train_loader,
             model,
             optimizer,
             loss_fn,
             scaler,
-            from_logits,
             train_metrics_init,
             metrics_fn,
-            epoch=epoch,
-            device=device,
+            epoch,
+            device,
         )
 
         # plot the validation metrics + save to history (dict)
-        # print(f" epoch {epoch}'s metric(s) (training) ".center(79, "."))
         print()
         # used reversed() to make 'loss' the first item
         for key, value in reversed(train_metrics.items()):
-            print(f"{key+':':<20} {value:>5.2f}")
+            if key == "loss":
+                print(f"{key+':':<20} {value:<10.6f}")
+            else:
+                print(f"{key+':':<20} {value:<10.2f}")
             history[key].append(value)
-        # print(" Training Phase (Done) ".center(79, "-"))
 
         if val_loader:
-            # print(" Validation Phase (In Progress) ".center(79, "-"))
-
             # add 'val_' to each metric
             # create/reset metrics values to 0 (for each epoch)
-            val_metrics_init = dict.fromkeys([f"val_{metric}" for metric in metrics], 0)
+            val_metrics_init = dict.fromkeys(
+                [f"val_{metric}" for metric in metrics_fn], 0
+            )
 
             val_metrics = validation_fn(
                 val_loader,
                 model,
                 loss_fn,
-                from_logits,
                 val_metrics_init,
                 metrics_fn,
-                device=device,
+                device,
             )
 
             # plot the validation metrics
-            # print(f" epoch {epoch}'s metric(s) (validation) ".center(79, "."))
             for key, value in reversed(val_metrics.items()):
-                print(f"{key+':':<20} {value:>5.2f}")
+                if key == "val_loss":
+                    print(f"{key+':':<20} {value:<10.6f}")
+                else:
+                    print(f"{key+':':<20} {value:<10.2f}")
                 history[key].append(value)
-            # print(f'{"val_accuracy:":<15} {val_accu.item():>5.2f}')
-            # print(f'{"val_dice:":<15} {val_dice.item():>5.2f}')
-            # history["val_accuracy"].append(val_accu.item())
-            # history["val_dice"].append(val_dice.item())
-            # print(" Validation Phase (Done) ".center(79, "-"))
-
-            # print some examples to a folder
 
         # decay lr_rate (must be at the end of each epoch)
         scheduler.step()
+
+        # save the model checkpoint for this epoch (based on a criterion)
+        # we overwrite the previous temp_checkpoints (in the interest of diskspace)
+        if epoch + 1 == 1 and save_model_temp:
+            # save the 1st epoch, nonetheless.
+            checkpoint_temp = {
+                "state_dict": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+            }
+
+            save_checkpoint(
+                checkpoint_temp,
+                dirname=save_model_temp_path,
+                filename="temp_model_checkpoint",
+            )
+            del checkpoint_temp
+        elif (
+            (epoch + 1 >= 2)
+            and (history["val_loss"][epoch] < history["val_loss"][epoch - 1])
+            and save_model_temp
+        ):  # if we have prev epochs
+            checkpoint_temp = {
+                "state_dict": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+            }
+
+            save_checkpoint(
+                checkpoint_temp,
+                dirname=save_model_temp_path,
+                filename="temp_model_checkpoint",
+            )
+            del checkpoint_temp
 
     # save the trained model
     if save_model:
@@ -344,14 +375,13 @@ def train_model(
             "optimizer": optimizer.state_dict(),
         }
 
-        save_checkpoint(
-            checkpoint, dirname=save_checkpoint_path, filename=save_checkpoint_name
-        )
+        save_checkpoint(checkpoint, dirname=save_model_path, filename=save_model_name)
+        del checkpoint
 
     return history
 
 
-# TODO: write a main fn for pytorch-lightning
+# TODO: write a BinarySegmentLightning class for pytorch-lightning train, eval, inference
 
 
 ###############################################################################
