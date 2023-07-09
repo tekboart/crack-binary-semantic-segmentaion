@@ -7,26 +7,51 @@ from typing import Union
 
 
 def save_checkpoint(
-    state, dirname: str = "", filename: str = None, utc_tz: bool = False, verbose: bool = False
+    state: dict,
+    dirname: str = "",
+    filename: str = None,
+    utc_tz: bool = False,
+    verbose: bool = False,
 ) -> None:
     """
     Save the trained model's state (aka checkpoint)
+
+    Parameters
+    ----------
+    state: dict
+        a dictionary of model.state, optimizer.stat, etc.
+    dirname: str
+        the path to which the checkpoint is going to be saved.
+        If the address is more than 1 lvl, then it's better to use pathlib.Path or os.joing to make the address OS agnostic.
+    filename: str
+        the filename of the saved checkpoint.
+    utc_tz: bool
+        Whether to use the UTC time (instead of the local TIMEZONE) when the filename is not provided.
+    verbose: bool
+        Whether print lines declaring that the model's checkpoint is being saved
+
+    Examples
+    --------
+    >>> state_checkpoint = {"state_dict": model.state_dict(),"optimizer": optimizer.state_dict()}
+    >>> save_checkpoint(state_checkpoint,dirname=os.path.join("models", "Oct"), filename="temp_model_checkpoint")
     """
     from datetime import datetime
+    import os
 
-    if verbose:
-        print(" Saving Checkpoint (In progress) ".center(79, "-"))
-
+    # Define the checkpoints filename
     if filename:
         filename = f"{dirname}{filename}.pth.tar"
     elif not filename and not utc_tz:
         # get the date+time (of currect TimeZone)
         time = datetime.today().strftime("%Y.%m.%d@%H-%M-%S")
-        filename = f"{dirname}{time}@model_checkpoint.pth.tar"
+        filename = f"{dirname}{os.sep}{time}@model_checkpoint.pth.tar"
     elif not filename and utc_tz:
         # get the date+time (of UTC TimeZone)
         time = datetime.utcnow().strftime("%Y-%m-%d %H-%M-%S")
-        filename = f"{dirname}{time}@model_checkpoint.pth.tar"
+        filename = f"{dirname}{os.sep}{time}@model_checkpoint.pth.tar"
+
+    if verbose:
+        print(" Saving Checkpoint (In progress) ".center(79, "-"))
 
     torch.save(state, filename)
     if verbose:
@@ -41,12 +66,16 @@ def load_checkpoint(checkpoint, model, verbose: bool = False) -> None:
 
     Parameters
     ----------
-    checkpoint
+    checkpoint: .pth | .pth.tar
         A previously saved model checkpoint (e.g., using torch.save())
         e.g., my_checkpoint.pth.tar
+    model: torch.nn.Module
+        the model into which we want to load the checkpoint.
+    verbose: bool
+        Whether print lines declaring that the model's checkpoint is being loaded.
     """
     if verbose:
-        print(" Loading Checkpoint (In progress) ".center(79, "-"))
+        print(" Loading Checkpoint (In Progress) ".center(79, "-"))
 
     model.load_state_dict(checkpoint["state_dict"])
 
@@ -379,7 +408,9 @@ def train_model(
             "optimizer": optimizer.state_dict(),
         }
 
-        save_checkpoint(checkpoint, dirname=save_model_path, filename=save_model_name, verbose=True)
+        save_checkpoint(
+            checkpoint, dirname=save_model_path, filename=save_model_name, verbose=True
+        )
         del checkpoint
 
     return history
