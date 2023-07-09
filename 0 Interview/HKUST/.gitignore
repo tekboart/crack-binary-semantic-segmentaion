@@ -2,3 +2,9 @@
 # data/*
 0\ Original\ Resources/*
 temp/*
+traindata/*
+valdata/*
+testdata/*
+training_set/*
+
+
