@@ -1,10 +1,10 @@
 # ignore the dataset (as it's too big)
-# data/*
-0\ Original\ Resources/*
-temp/*
-traindata/*
-valdata/*
-testdata/*
-training_set/*
+# data/
+0\ Original\ Resources/
+temp/
+traindata/
+valdata/
+testdata/
+training_set/
 
 
