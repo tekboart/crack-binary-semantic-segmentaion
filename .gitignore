@@ -1,0 +1,25 @@
+__pycache__
+.pytest_cache
+.vscode
+.idea
+.vim
+.ipynb_checkpoints
+*.pyc
+
+# the Drawio backup files
+*.bkp
+*.dtmp
+
+
+# --- ignore specific dirs/files -----
+# part of the data
+0\ Original\ Resources/
+traindata/
+valdata/
+testdata/
+training_set/
+
+# the temp dir
+temp/
+
+
