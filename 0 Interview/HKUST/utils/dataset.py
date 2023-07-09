@@ -54,7 +54,7 @@ class SegmentaionDataset(Dataset):
         self.mask_suffix = mask_suffix
         self.num_classes = num_classes
         self.transform = transform
-        self.pretrained_preprocess_fn = preprocess_fn
+        self.preprocess_fn = preprocess_fn
         self.data_format = data_format
 
     def __len__(self) -> int:
@@ -95,9 +95,8 @@ class SegmentaionDataset(Dataset):
             image = augmentations.get("image")
             mask = augmentations.get("mask")
 
-        if self.pretrained_preprocess_fn:
-            # image, mask = self.pretrained_preprocess_fn(image, mask)
-            image = self.pretrained_preprocess_fn(image)
+        if self.preprocess_fn:
+            image = self.preprocess_fn(image)
             assert isinstance(image, np.ndarray)
 
         # make the (image, mask) channels_first (as needed by pytorch models)
