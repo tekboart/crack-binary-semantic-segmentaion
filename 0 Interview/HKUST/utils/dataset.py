@@ -13,9 +13,16 @@ class SegmentaionDataset(Dataset):
     subset: tuple|list
         Set the start and end indices, to avoid
         >>> SegmentationDataset(image_dir, mask_dir, subset=[0, 10])
-        takes only 10 samples to create the dataset (i.e., [0:10])
-    data_format: st
-        define whether the final (img, mask) be channels_first (default) or channels_last
+        'takes only 10 samples to create the dataset (i.e., [0:10])'
+    data_format: str ('channels_first' (default) | 'channels_last')
+        define the final channel order for (img, mask) be channels_first (default) or channels_last
+
+    pretrained_preprocess_fn: Callable
+        A func the simulates the same preprocessing steps that inputs of the pretrained model have undergone.
+
+        \* must take and output channels_last image.
+
+        \** If use this, then no normalization must be done in self.transform (i.e., image augmentation)
 
     Methods
     -------
@@ -29,6 +36,7 @@ class SegmentaionDataset(Dataset):
         mask_ext: str = "png",
         mask_suffix: str = "_mask",
         transform=None,
+        preprocess_fn=None,
         num_classes: int = 1,
         data_format: str = 'channels_first',
         subset: Union[tuple, list] = None,
@@ -46,6 +54,7 @@ class SegmentaionDataset(Dataset):
         self.mask_suffix = mask_suffix
         self.num_classes = num_classes
         self.transform = transform
+        self.pretrained_preprocess_fn = preprocess_fn
         self.data_format = data_format
 
     def __len__(self) -> int:
@@ -86,6 +95,11 @@ class SegmentaionDataset(Dataset):
             image = augmentations.get("image")
             mask = augmentations.get("mask")
 
+        if self.pretrained_preprocess_fn:
+            # image, mask = self.pretrained_preprocess_fn(image, mask)
+            image = self.pretrained_preprocess_fn(image)
+            assert isinstance(image, np.ndarray)
+
         # make the (image, mask) channels_first (as needed by pytorch models)
         # Only if not using alumentations's ToTensorV2 (in self.transform)
         # which automatically reshape's the img, mask for pytorch models (caused error and shape mismatch)
@@ -94,9 +108,6 @@ class SegmentaionDataset(Dataset):
             assert image.shape[0] == 3
             mask = np.moveaxis(mask, -1, 0)
             assert mask.shape[0] == self.num_classes
-        # elif self.data_format == 'channels_last':
-        #     assert image.shape[-1] == 3
-        #     mask = np.expand_dims(mask, -1)
 
         return image, mask
 
@@ -106,12 +117,14 @@ class SegmentaionDataset(Dataset):
 
 
 def get_loaders(
-    train_ds: Dataset,
+    train_ds: Dataset = None,
     val_ds: Dataset = None,
     test_ds: Dataset = None,
     batch_size: int = 16,
     num_workers: int = 4,
     pin_memory: bool = True,
+    worker_init_fn=None,
+    generator=None,
 ):
     """
     Preparing your data for training with DataLoaders
@@ -119,13 +132,16 @@ def get_loaders(
     2. reshuffle the data at every epoch to reduce model overfitting (only for train set)
     3. use Python’s multiprocessing to speed up data retrieval
     """
-    train_dataloader = DataLoader(
-        train_ds,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        shuffle=True,
-    )
+    if train_ds:
+        train_dataloader = DataLoader(
+            train_ds,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            shuffle=True,
+            worker_init_fn=worker_init_fn,
+            generator=generator,
+        )
 
     if val_ds:
         val_dataloader = DataLoader(
@@ -134,6 +150,8 @@ def get_loaders(
             num_workers=num_workers,
             pin_memory=pin_memory,
             shuffle=False,
+            worker_init_fn=worker_init_fn,
+            generator=generator,
         )
     else:
         val_dataloader = None
@@ -145,6 +163,8 @@ def get_loaders(
             num_workers=num_workers,
             pin_memory=pin_memory,
             shuffle=False,
+            worker_init_fn=worker_init_fn,
+            generator=generator,
         )
     else:
         test_dataloader = None
