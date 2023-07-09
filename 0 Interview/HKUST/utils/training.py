@@ -1,14 +1,11 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.optim.lr_scheduler import StepLR
 from tqdm import tqdm
 from typing import Union
 
 
 def save_checkpoint(
     state: dict,
-    dirname: str = "",
     filename: str = None,
     utc_tz: bool = False,
     verbose: bool = False,
@@ -20,11 +17,9 @@ def save_checkpoint(
     ----------
     state: dict
         a dictionary of model.state, optimizer.stat, etc.
-    dirname: str
-        the path to which the checkpoint is going to be saved.
-        If the address is more than 1 lvl, then it's better to use pathlib.Path or os.joing to make the address OS agnostic.
     filename: str
         the filename of the saved checkpoint.
+        e.g., 2023.07.08@09-13-12-model_checkpoint.pth.tar
     utc_tz: bool
         Whether to use the UTC time (instead of the local TIMEZONE) when the filename is not provided.
     verbose: bool
@@ -40,15 +35,15 @@ def save_checkpoint(
 
     # Define the checkpoints filename
     if filename:
-        filename = f"{dirname}{filename}.pth.tar"
+        filename = f"{filename}.pth.tar"
     elif not filename and not utc_tz:
         # get the date+time (of currect TimeZone)
         time = datetime.today().strftime("%Y.%m.%d@%H-%M-%S")
-        filename = f"{dirname}{os.sep}{time}@model_checkpoint.pth.tar"
+        filename = f"{time}@model_checkpoint.pth.tar"
     elif not filename and utc_tz:
         # get the date+time (of UTC TimeZone)
         time = datetime.utcnow().strftime("%Y-%m-%d %H-%M-%S")
-        filename = f"{dirname}{os.sep}{time}@model_checkpoint.pth.tar"
+        filename = f"{time}@model_checkpoint.pth.tar"
 
     if verbose:
         print(" Saving Checkpoint (In progress) ".center(79, "-"))
@@ -60,7 +55,7 @@ def save_checkpoint(
         print(" Saving Checkpoint (Done) ".center(79, "-"))
 
 
-def load_checkpoint(checkpoint, model, verbose: bool = False) -> None:
+def load_checkpoint(checkpoint: str, model, verbose: bool = False) -> None:
     """
     Load the weights from a the trained model's checkpoint to another model.
 
@@ -257,19 +252,19 @@ class BinarySegmentationModel(nn.Module):
 def train_model(
     model,
     train_loader,
-    from_logits: bool,
-    epochs: int = 5,
+    optimizer,  # move these to <model Class>.compile method
+    loss_fn,  # move these to <model Class>.compile method
+    scheduler=None,  # move these to <model Class>.compile method
+    metrics: dict = {},  # move these to <model Class>.compile method
     val_loader=None,
-    lr: float = 0.001,
+    epochs: int = 5,
     device: str = "cuda:0",
     save_model: bool = False,
-    save_model_path: str = "",
-    save_model_name: str = None,
+    save_model_filename: str = None,
     save_model_temp: bool = False,
-    save_model_temp_path: str = "",
+    save_model_temp_filename: str = None,
     load_model: bool = False,
-    load_checkpoint_path: str = None,
-    metrics_fn: dict = {},
+    load_model_filename: str = None,
 ):
     """
     Do the training for several epoch (written in pure PyTorch)
@@ -277,30 +272,20 @@ def train_model(
     # TODO: add the needed hyperparameters (e.g., lr_decay_step) as args to this func (is more versatile)
     model = model.to(device)
 
-    # set the loss function
-    if from_logits:
-        loss_fn = nn.BCEWithLogitsLoss()
-    else:
-        loss_fn = nn.BCELoss()
-
-    # set the optimizer
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    # set learning schedualer
-    scheduler = StepLR(optimizer, step_size=10, gamma=0.5)
-
-    # load weights a pretrained model
+    # load weights a pretrained model (before further training)
     if load_model:
-        load_checkpoint(torch.load(load_checkpoint_path), model)
+        load_checkpoint(torch.load(load_model_filename), model)
 
     # To prevent underflow in grads by scaling the loss
     # when precision lvl (e.g., Float16) cannot represent very small numbers
     scaler = torch.cuda.amp.GradScaler()
 
+    # TODO: add changin an setting of the metrics to <model Class>.compile()
     # init the train metrcis (e.g., val_loss, val_dice, etc.)
     # we add 'loss' separately as it's not part of metrics
     history = {"loss": []}
     # add other metrics (if any)
-    for key in metrics_fn:
+    for key in metrics:
         history[key] = []
 
     # init the val metrcis (e.g., val_loss, val_dice, etc.)
@@ -317,7 +302,7 @@ def train_model(
     for epoch in range(epochs):
         print(f" epoch {epoch+1}/{epochs} ".center(79, "-"))
         # create/reset metrics values to 0 (for each epoch)
-        train_metrics_init = dict.fromkeys(metrics_fn, 0)
+        train_metrics_init = dict.fromkeys(metrics, 0)
 
         # Start training iterations (for this epoch)
         train_metrics = train_fn(
@@ -327,7 +312,7 @@ def train_model(
             loss_fn,
             scaler,
             train_metrics_init,
-            metrics_fn,
+            metrics,
             epoch,
             device,
         )
@@ -345,16 +330,14 @@ def train_model(
         if val_loader:
             # add 'val_' to each metric
             # create/reset metrics values to 0 (for each epoch)
-            val_metrics_init = dict.fromkeys(
-                [f"val_{metric}" for metric in metrics_fn], 0
-            )
+            val_metrics_init = dict.fromkeys([f"val_{metric}" for metric in metrics], 0)
 
             val_metrics = validation_fn(
                 val_loader,
                 model,
                 loss_fn,
                 val_metrics_init,
-                metrics_fn,
+                metrics,
                 device,
             )
 
@@ -366,8 +349,9 @@ def train_model(
                     print(f"{key+':':<20} {value:<10.2f}")
                 history[key].append(value)
 
-        # decay lr_rate (must be at the end of each epoch)
-        scheduler.step()
+        # schedule lr_rate (must be at the end of each epoch)
+        if scheduler:
+            scheduler.step()
 
         # save the model checkpoint for this epoch (based on a criterion)
         # we overwrite the previous temp_checkpoints (in the interest of diskspace)
@@ -378,11 +362,7 @@ def train_model(
                 "optimizer": optimizer.state_dict(),
             }
 
-            save_checkpoint(
-                checkpoint_temp,
-                dirname=save_model_temp_path,
-                filename="temp_model_checkpoint",
-            )
+            save_checkpoint(checkpoint_temp, filename=save_model_temp_filename)
             del checkpoint_temp
         elif (
             (epoch + 1 >= 2)
@@ -394,11 +374,7 @@ def train_model(
                 "optimizer": optimizer.state_dict(),
             }
 
-            save_checkpoint(
-                checkpoint_temp,
-                dirname=save_model_temp_path,
-                filename="temp_model_checkpoint",
-            )
+            save_checkpoint(checkpoint_temp, filename=save_model_temp_filename)
             del checkpoint_temp
 
     # save the trained model
@@ -409,7 +385,9 @@ def train_model(
         }
 
         save_checkpoint(
-            checkpoint, dirname=save_model_path, filename=save_model_name, verbose=True
+            checkpoint,
+            filename=save_model_filename,
+            verbose=True,
         )
         del checkpoint
 
