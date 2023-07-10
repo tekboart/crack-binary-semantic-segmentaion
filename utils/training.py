@@ -1,5 +1,7 @@
+import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
+from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
 from tqdm import tqdm
 from typing import Union
 
@@ -276,6 +278,10 @@ def train_model(
     if load_model:
         load_checkpoint(torch.load(load_model_filename), model)
 
+    # Create a list to store lr at each epoch (to plot it later)
+    if scheduler:
+        lr_list = [optimizer.param_groups[0]["lr"]]
+
     # To prevent underflow in grads by scaling the loss
     # when precision lvl (e.g., Float16) cannot represent very small numbers
     scaler = torch.cuda.amp.GradScaler()
@@ -304,6 +310,7 @@ def train_model(
         # create/reset metrics values to 0 (for each epoch)
         train_metrics_init = dict.fromkeys(metrics, 0)
 
+        # training phase
         # Start training iterations (for this epoch)
         train_metrics = train_fn(
             train_loader,
@@ -327,6 +334,7 @@ def train_model(
                 print(f"{key+':':<20} {value:<10.2f}")
             history[key].append(value)
 
+        # validation phase
         if val_loader:
             # add 'val_' to each metric
             # create/reset metrics values to 0 (for each epoch)
@@ -344,14 +352,30 @@ def train_model(
             # plot the validation metrics
             for key, value in reversed(val_metrics.items()):
                 if key == "val_loss":
+                    # plot loss with more decimal points
                     print(f"{key+':':<20} {value:<10.6f}")
                 else:
                     print(f"{key+':':<20} {value:<10.2f}")
                 history[key].append(value)
 
-        # schedule lr_rate (must be at the end of each epoch)
+        # scheduler.step should be called after validation phase
+        # to have access to the val set metrics (e.g., val_loss)
         if scheduler:
-            scheduler.step()
+            if isinstance(scheduler, (StepLR)):
+                # decay the lr_rate
+                scheduler.step()
+            elif isinstance(scheduler, (ReduceLROnPlateau)):
+                # decay the lr_rate based on a val_<metric>
+                scheduler.step(history['val_loss'][-1])
+            # print the decayed lr_rate now
+            # method 1: Caveman
+            lr_now = optimizer.param_groups[0]["lr"]
+            # method 2: simple but not all schedulers (e.g., ReduceLROnPlateau) has get_last_lr method
+            # lr_now = scheduler.get_last_lr()
+            lr_list.append(lr_now)
+            # print if the lr has been changed/decayed
+            if lr_list[-1] != lr_list[-2]:
+                print(f'\n>>> lr_rate was decayed to: {lr_now:f}\n')
 
         # save the model checkpoint for this epoch (based on a criterion)
         # we overwrite the previous temp_checkpoints (in the interest of diskspace)
@@ -390,6 +414,15 @@ def train_model(
             verbose=True,
         )
         del checkpoint
+
+    # save the lr_rate list (for all epochs + 1 (initial lr_rate) )
+    plt.plot(lr_list)
+    plt.yscale('log')
+    plt.title('lr_rate Scheduling')
+    plt.xlabel('Epochs')
+    plt.ylabel('lr_rate')
+    plt.show()
+    #TODO: when converted training_loop as a nn.Module class, then use self.lr_list = lr_list
 
     return history
 
