@@ -16,3 +16,4 @@ pytorch-lightning==2.0.4
 lightning-utilities==0.9.0
 segmentation-models-pytorch==0.3.3
 monai==1.2.0
+tensorflow
