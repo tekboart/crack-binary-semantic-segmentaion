@@ -1,4 +1,5 @@
 # add these line at the beginning after opening the train.ipynb from github
+# must add each to a separated cell (all in one cell doesn't work)
 
 # Cell 1
 !git clone https://github.com/tekboart/semantic-segmentaion-pytorch
