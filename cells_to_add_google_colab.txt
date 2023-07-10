@@ -1,0 +1,13 @@
+# add these line at the beginning after opening the train.ipynb from github
+
+# Cell 1
+!git clone https://github.com/tekboart/semantic-segmentaion-pytorch
+
+# Cell 2
+%pwd
+
+# Cell 3
+%cd semantic-segmentaion-pytorch/
+
+# Cell 4
+!pip install -r requirements.txt
