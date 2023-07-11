@@ -46,10 +46,11 @@ def torch_tensor_for_plt(
     return tensor
 
 
-#TODO: I've written a better fn --> delete it
-def plot_segmentation_inference(img_batch, mask_batch, yhat_mask_batch, limit: int = None):
-
-    '''
+# TODO: I've written a better fn --> delete it
+def plot_segmentation_inference(
+    img_batch, mask_batch, yhat_mask_batch, limit: int = None
+):
+    """
     Take three Tensors with equal batch_size and plot them side by side (each record in on row)
 
     Parameters
@@ -57,7 +58,7 @@ def plot_segmentation_inference(img_batch, mask_batch, yhat_mask_batch, limit: i
 
     truncate: int
         Set a value to plot only a limited number of examples. (must be >= 1)
-    '''
+    """
 
     img_ndim = len(img_batch.shape)
     mask_ndim = len(img_batch.shape)
@@ -77,30 +78,33 @@ def plot_segmentation_inference(img_batch, mask_batch, yhat_mask_batch, limit: i
         yhat_mask = yhat_mask_batch[0]
         mask = mask_batch[0]
         axes[0].imshow(img)
-        axes[0].set_title(f'Image {[*img.shape]}', fontsize=16)
-        axes[0].axis('off')
-        axes[1].imshow(yhat_mask, cmap='gray')
-        axes[1].set_title(f'Mask (predicted) {[*yhat_mask.shape]}', fontsize=16)
-        axes[1].axis('off')
-        axes[2].imshow(mask, cmap='gray')
-        axes[2].set_title(f'Mask (target) {[*mask.shape]}', fontsize=16)
-        axes[2].axis('off')
+        axes[0].set_title(f"Image {[*img.shape]}", fontsize=16)
+        axes[0].axis("off")
+        axes[1].imshow(yhat_mask, cmap="gray")
+        axes[1].set_title(f"Mask (predicted) {[*yhat_mask.shape]}", fontsize=16)
+        axes[1].axis("off")
+        axes[2].imshow(mask, cmap="gray")
+        axes[2].set_title(f"Mask (target) {[*mask.shape]}", fontsize=16)
+        axes[2].axis("off")
     elif batch_size > 1:
         for row in range(batch_size):
             img = img_batch[row]
             yhat_mask = yhat_mask_batch[row]
             mask = mask_batch[row]
             axes[row][0].imshow(img)
-            axes[row][0].set_title(f'Image {[*img.shape]}', fontsize=16)
-            axes[row][0].axis('off')
-            axes[row][1].imshow(yhat_mask, cmap='gray')
-            axes[row][1].set_title(f'Mask (predicted) {[*yhat_mask.shape]}', fontsize=16)
-            axes[row][1].axis('off')
-            axes[row][2].imshow(mask, cmap='gray')
-            axes[row][2].set_title(f'Mask (target) {[*mask.shape]}', fontsize=16)
-            axes[row][2].axis('off')
+            axes[row][0].set_title(f"Image {[*img.shape]}", fontsize=16)
+            axes[row][0].axis("off")
+            axes[row][1].imshow(yhat_mask, cmap="gray")
+            axes[row][1].set_title(
+                f"Mask (predicted) {[*yhat_mask.shape]}", fontsize=16
+            )
+            axes[row][1].axis("off")
+            axes[row][2].imshow(mask, cmap="gray")
+            axes[row][2].set_title(f"Mask (target) {[*mask.shape]}", fontsize=16)
+            axes[row][2].axis("off")
 
     plt.show()
+
 
 class ImageAntiStandardize:
     """
@@ -126,6 +130,7 @@ class ImageAntiStandardize:
         >>> img = (img - mean) / std
         >>> img == img_restored
     """
+
     def __init__(
         self,
         channels_mean: list = [0.485, 0.456, 0.406],
@@ -137,11 +142,11 @@ class ImageAntiStandardize:
         self.clip = clip
 
     def __call__(self, image):
-        '''
+        """
         Parameters
         ----------
         img: np.ndarray
-        '''
+        """
         mean = np.array(self.channels_mean)
         std = np.array(self.channels_std)
         image = std * image + mean
@@ -181,10 +186,10 @@ def image_batch_to_ndarray_channels_first(batched_img_tensor, data_format: str):
             batched_img_tensor = batched_img_tensor.numpy().transpose(
                 channel_first_to_channel_last_order
             )
-    #TODO: Should I add support for tf.Tensor
+    # TODO: Should I add support for tf.Tensor
     # I have to import the entire tensorflow to just use tf.Tensor type???
     # get so much MEM with no use
-    #TODO: if not remove tf.Tensor from ValueError (below) as well
+    # TODO: if not remove tf.Tensor from ValueError (below) as well
     # elif isinstance(batched_img_tensor, Tensor):
     #     if data_format == "channels_first":
     #         batched_img_tensor = batched_img_tensor.numpy().transpose(
@@ -204,7 +209,7 @@ def image_mask_plot(
     num_rows: int = 1,
     titles: list = ["image", "mask (target)", "mask (predict)"],
     plot_axes: bool = False,
-    anti_standardize_fn = None,
+    anti_standardize_fn=None,
 ):
     """
     plot image, mask pairs of a given batch of data.
@@ -212,8 +217,8 @@ def image_mask_plot(
     Parameters
     ----------
     batch_list: list
-        a list of [torch.Tensors] with shape (N, H, W, C) or (N, C, W, C)
-        e.g., [img_batch, mask_batch, yhat_batch]
+        a list of [torch.Tensors] with shape (N, H, W, C) or (N, C, W, C).
+        The order is important so either [img_batch, mask_batch] or [img_batch, mask_batch, yhat_batch]
     data_format: str | 'channels_first' or 'channels_last'
     num_rows: int
     titles: list
@@ -241,8 +246,8 @@ def image_mask_plot(
         for col_idx in range(num_cols):
             img = batch_list[col_idx][row_idx]
 
-            # different setting for images and masks
-            if img.shape[-1] == 1:
+            # different setting for target_masks
+            if col_idx in [1, 2] and img.shape[-1] == 1:
                 axes[row_idx][col_idx].imshow(img, cmap="gray")
             else:
                 if anti_standardize_fn:
@@ -255,3 +260,129 @@ def image_mask_plot(
 
             if not plot_axes:
                 axes[row_idx][col_idx].axis("off")
+
+
+def plot_metrics(
+    history: dict, epochs: int, metrics: list = ["loss"], auc_min: float = 0.8
+) -> None:
+    """
+    Plot the metrics (for both the train and val)
+
+    Parameters
+    ----------
+    history: dict
+        the output of model.fit()
+    epochs: int
+        the #epochs we trained the model
+    metrics: list
+        a list of metrics to be plotted
+    auc_min: 0.8
+        as we need to zoom-in more for AUC curve, we use this to limit the range
+
+    returns
+    -------
+    None
+    """
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+    plt.figure(figsize=(12, len(metrics) * 2))
+    # take the ceiling of #metrics provided as the #rows
+    plot_height = int(len(metrics) / 2) + 1
+
+    for i, metric in enumerate(metrics):
+        name = metric.replace("_", " ").title()
+        plt.subplot(plot_height, 2, i + 1)
+        plt.plot(range(1, epochs + 1), history[metric], color=colors[0], label="Train")
+        plt.plot(
+            range(1, epochs + 1),
+            history["val_" + metric],
+            color=colors[1],
+            linestyle="--",
+            label="Val",
+        )
+        plt.xlabel("Epoch")
+        plt.ylabel(name)
+        if metric == "loss":
+            plt.ylim([0, plt.ylim()[1]])
+        elif metric == "auc":
+            plt.ylim([auc_min, 1])
+        else:
+            plt.ylim([0, 1])
+
+        plt.legend()
+        plt.tight_layout()
+
+
+def plot_metrics_finetune(history, history_finetune, metrics: list = ["loss"]):
+    """
+    #TODO: fix docstring
+
+    args:
+        history: the output of original model.fit()
+        history_finetuen: the history of model after finetune (un-freezing layers)
+        metrics: a list of metrics to be plotted
+
+    returns:
+        a multi plot of the performance of the model + a green line to differentiate before and after finetuning
+
+
+    Examples
+    --------
+    >>> plot_metrics_finetune(MobileNet_tl_history,
+                      MobileNet_tl_finetune_history,
+                      initial_epochs_real,
+                      metrics=metrics_names)
+    >>> plt.suptitle('both preliminary & finetune phases')
+    >>> plt.tight_layout()
+    >>> plt.show()
+    """
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+    # the #epochs for TL phase 1 (useful if use earlystoppage)
+    num_epochs_train = len(history["loss"])
+    num_epochs_finetune = len(history_finetune["loss"])
+
+    plt.figure(figsize=(12, len(metrics) * 2))
+    # take the ceiling of #metrics provided as the #rows
+    # cal the #rows
+    # num_rows = int(len(metrics) / 2) + 1
+    num_rows = np.ceil(len(metrics) / 2).astype("int") + 1
+
+    for i, metric in enumerate(metrics):
+        # name = metric.replace("_", " ").capitalize()
+        name = metric.replace("_", " ").title()
+        plt.subplot(num_rows, 2, i + 1)
+        metric_train = history[metric] + history_finetune[metric]
+        metric_val = history["val_" + metric] + history_finetune["val_" + metric]
+        # epoch = history.epoch + history_finetune.epoch
+        epoch = num_epochs_train + num_epochs_finetune
+        # plot the train metrics
+        plt.plot(range(1, epoch + 1), metric_train, color=colors[0], label="Train")
+        # plot the val metrics
+        # plt.plot(range(1, epoch+1), metric_val, color=colors[1], linestyle="-", label="Val")
+        plt.plot(
+            range(1, epoch + 1),
+            metric_val,
+            color=colors[1],
+            linestyle="--",
+            label="Val",
+        )
+        # plot the vertical line (to denote fine-tune section)
+        plt.plot(
+            [num_epochs_train, num_epochs_train],
+            plt.ylim([0, 1]),
+            color=colors[2],
+            linestyle=":",
+            label="Start Fine Tuning",
+        )
+        plt.xlabel("Epoch")
+        plt.ylabel(name)
+        if metric == "loss":
+            plt.ylim([0, plt.ylim()[1]])
+        elif metric == "auc":
+            plt.ylim([0.8, 1])
+        else:
+            plt.ylim([0, 1])
+
+        plt.legend()
+        plt.tight_layout()
