@@ -13,7 +13,7 @@ class SegmentaionDataset(Dataset):
     subset: tuple|list
         Set the start and end indices, to avoid
         >>> SegmentationDataset(image_dir, mask_dir, subset=[0, 10])
-        'takes only 10 samples to create the dataset (i.e., [0:10])'
+        >>> # takes only 10 samples to create the dataset (i.e., [0:10])
     data_format: str ('channels_first' (default) | 'channels_last')
         define the final channel order for (img, mask) be channels_first (default) or channels_last
 
@@ -113,6 +113,12 @@ class SegmentaionDataset(Dataset):
     # TODO: create the __iter__ methodd (must be like tf.Dataset to use next(iter()))
     # def __iter__(self):
     #     pass
+
+    def pred_num_batches(self, batch_size: int) -> int:
+        '''
+        Predict the #mini_batches after getting sliced to batches (e.g., by Loader).
+        '''
+        return np.ceil(len(self) / batch_size).astype('int')
 
 
 def get_loaders(
