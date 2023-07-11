@@ -149,7 +149,7 @@ def train_fn(
 
 
 # TODO: This should work standalone (for evaluation of test data)
-def validation_fn(
+def evaluate_fn(
     loader,
     model,
     loss_fn,
@@ -161,7 +161,7 @@ def validation_fn(
     does one validation step (used at the end of each epoch)
         simply, does (1) forward pass + (2) eval_metrics (for the val set)
     """
-    num_val_batches = sum(1 for _, _ in loader)
+    num_batches = sum(1 for _, _ in loader)
     epoch_val_loss_cum = 0
 
     # TODO: why this line?
@@ -179,6 +179,7 @@ def validation_fn(
             # forward
             # we use float16 to reduce VRAM and MEM usage
             with torch.cuda.amp.autocast():
+                model = model.to(device)  # when call validation_fn alone (e.g., in model.evaluate()/predict())
                 yhat = model(x)
                 assert yhat.shape == y.shape
 
@@ -192,15 +193,15 @@ def validation_fn(
             # calc val metrics for this mini_batch
             for key in metrics:
                 # used split() to remove 'val_' part of key
-                if eval_fn := metrics_fn.get(key.split("_")[1]):
+                if eval_fn := metrics_fn.get(key):
                     metrics[key] += eval_fn(yhat, y).item()
 
     # add the val_loss (of this epoch) to metrics
-    metrics["val_loss"] = epoch_val_loss_cum
+    metrics["loss"] = epoch_val_loss_cum
 
     for key in metrics:
         # divide all metrics by the #steps/batches
-        metrics[key] /= num_val_batches
+        metrics[key] /= num_batches
 
     # TODO: why this line?
     # probab to set training=True (to continue training in next epoch)
@@ -208,6 +209,53 @@ def validation_fn(
 
     return metrics
 
+# TODO: This should work standalone (for evaluation of test data)
+def predict_fn(
+    loader,
+    model,
+    thresh: float = 0.5,
+    act_fn = None,
+    device: str = "cuda",
+):
+    """
+    #TODO: I made it a Generator to save MEM/Computation, does it work?
+
+    does one inference step
+        simply, does (1) forward pass
+
+    Parameters
+    ----------
+    act_fn: Callable
+        If the output layer of the model doesn't have an act_func (is from_logit),
+        then provive a suitable act_func (e.g., torch.sigmoid for binary segmentation).
+    """
+    # training=False (for layers, dropout, batchnorm, etc.)
+    model.eval()
+
+    # Don't cache values for backprop (ME)
+    with torch.no_grad():
+        for x, y in loader:
+            # load our x:data, y:targets to device's MEM (e.g., GPU VRAM)
+            x = x.float().to(device)
+            y = y.float().to(device)
+
+            # forward
+            # we use float16 to reduce VRAM and MEM usage
+            with torch.cuda.amp.autocast():
+                model = model.to(device)  # when call validation_fn alone (e.g., in model.evaluate()/predict())
+                yhat = model(x)
+                assert yhat.shape == y.shape
+
+                # apply act func (if from_logit)
+                yhat = act_fn(yhat)
+                # make each pixel value of yhat binary (0 or 1)
+                yhat = (yhat >= thresh).float()
+
+
+            yield x, y, yhat
+
+    # set training=True (to continue training in next epoch)
+    model.train()
 
 # TODO: create a class with fit(), evaluate(), predict() methods
 class BinarySegmentationModel(nn.Module):
@@ -251,7 +299,7 @@ class BinarySegmentationModel(nn.Module):
         self.metrics_fn = metrics_fn
 
 
-def train_model(
+def fit_fn(
     model,
     train_loader,
     optimizer,  # move these to <model Class>.compile method
@@ -338,9 +386,10 @@ def train_model(
         if val_loader:
             # add 'val_' to each metric
             # create/reset metrics values to 0 (for each epoch)
-            val_metrics_init = dict.fromkeys([f"val_{metric}" for metric in metrics], 0)
+            # val_metrics_init = dict.fromkeys([f"val_{metric}" for metric in metrics], 0)
+            val_metrics_init = dict.fromkeys(metrics, 0)
 
-            val_metrics = validation_fn(
+            val_metrics = evaluate_fn(
                 val_loader,
                 model,
                 loss_fn,
@@ -350,7 +399,10 @@ def train_model(
             )
 
             # plot the validation metrics
-            for key, value in reversed(val_metrics.items()):
+            # add 'val_' prefix to the metrics
+            temp_val_metric_list = {f"val_{key}":value for key, value in val_metrics.items()}
+            # for key, value in reversed(val_metrics.items()):
+            for key, value in reversed(temp_val_metric_list.items()):
                 if key == "val_loss":
                     # plot loss with more decimal points
                     print(f"{key+':':<20} {value:<10.6f}")
@@ -377,13 +429,15 @@ def train_model(
             if lr_list[-1] != lr_list[-2]:
                 print(f'\n>>> lr_rate was decayed to: {lr_now:f}\n')
 
+        #TODO: my method is caveman: use below link to use import tempdir
         # save the model checkpoint for this epoch (based on a criterion)
         # we overwrite the previous temp_checkpoints (in the interest of diskspace)
         if epoch + 1 == 1 and save_model_temp:
             # save the 1st epoch, nonetheless.
             checkpoint_temp = {
-                "state_dict": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "epoch": epoch,
             }
 
             save_checkpoint(checkpoint_temp, filename=save_model_temp_filename)
@@ -394,18 +448,21 @@ def train_model(
             and save_model_temp
         ):  # if we have prev epochs
             checkpoint_temp = {
-                "state_dict": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "epoch": epoch,
             }
 
             save_checkpoint(checkpoint_temp, filename=save_model_temp_filename)
             del checkpoint_temp
 
     # save the trained model
+    #TODO: Load the best performance model (through all epochs)
+    # use pytorch Transfer learning tutorial for examples
     if save_model:
         checkpoint = {
-            "state_dict": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
         }
 
         save_checkpoint(
