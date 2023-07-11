@@ -12,6 +12,7 @@ torchaudio==2.0.2+cu118
 torchmetrics==0.11.4
 torchvision==0.15.2+cu118
 torchviz==0.0.2
+torcheval==0.0.6
 pytorch-lightning==2.0.4
 lightning-utilities==0.9.0
 segmentation-models-pytorch==0.3.3
