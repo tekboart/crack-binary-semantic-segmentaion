@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image
 from typing import Union
 
+
 class SegmentaionDataset(Dataset):
     """
     # TODO: add docstring
@@ -38,7 +39,7 @@ class SegmentaionDataset(Dataset):
         transform=None,
         preprocess_fn=None,
         num_classes: int = 1,
-        data_format: str = 'channels_first',
+        data_format: str = "channels_first",
         subset: Union[tuple, list] = None,
     ):
         super().__init__()
@@ -102,7 +103,7 @@ class SegmentaionDataset(Dataset):
         # make the (image, mask) channels_first (as needed by pytorch models)
         # Only if not using alumentations's ToTensorV2 (in self.transform)
         # which automatically reshape's the img, mask for pytorch models (caused error and shape mismatch)
-        if self.data_format == 'channels_first':
+        if self.data_format == "channels_first":
             image = np.moveaxis(image, -1, 0)
             assert image.shape[0] == 3
             mask = np.moveaxis(mask, -1, 0)
@@ -115,10 +116,10 @@ class SegmentaionDataset(Dataset):
     #     pass
 
     def pred_num_batches(self, batch_size: int) -> int:
-        '''
+        """
         Predict the #mini_batches after getting sliced to batches (e.g., by Loader).
-        '''
-        return np.ceil(len(self) / batch_size).astype('int')
+        """
+        return np.ceil(len(self) / batch_size).astype("int")
 
 
 def get_loaders(
@@ -136,6 +137,12 @@ def get_loaders(
     1. put samples in “minibatches”
     2. reshuffle the data at every epoch to reduce model overfitting (only for train set)
     3. use Python’s multiprocessing to speed up data retrieval
+
+
+    Returns
+    -------
+    list
+        The #loaders in the output depends on which of the train_ds, val_ds, or test_ds were provided in input.
     """
     if train_ds:
         train_dataloader = DataLoader(
@@ -147,6 +154,8 @@ def get_loaders(
             worker_init_fn=worker_init_fn,
             generator=generator,
         )
+    else:
+        train_dataloader = None
 
     if val_ds:
         val_dataloader = DataLoader(
@@ -174,7 +183,15 @@ def get_loaders(
     else:
         test_dataloader = None
 
-    return train_dataloader, val_dataloader, test_dataloader
+    # just return the loaders that are non-empty
+    data_loaders = [
+        loader
+        for loader in (train_dataloader, val_dataloader, test_dataloader)
+        if loader is not None
+    ]
+
+    # return train_dataloader, val_dataloader, test_dataloader
+    return data_loaders
 
 
 ###############################################################################
