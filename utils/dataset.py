@@ -190,8 +190,8 @@ def get_loaders(
         if loader is not None
     ]
 
-    # return train_dataloader, val_dataloader, test_dataloader
-    return data_loaders
+    return train_dataloader, val_dataloader, test_dataloader
+    # return data_loaders
 
 
 ###############################################################################
