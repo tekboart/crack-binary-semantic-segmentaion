@@ -103,6 +103,10 @@ def train_fn(
     num_batches = sum(1 for _ in iter(loop))
     epoch_loss_cum = 0
 
+    # Tell model we are in training mode
+    # This is better to be at the start of train_fn, right?
+    model.train()
+
     for batch_idx, (x, y) in enumerate(loop):
         # load our x:data, y:targets to device's MEM (e.g., GPU VRAM)
         x = x.float().to(device)
@@ -138,6 +142,9 @@ def train_fn(
         # update the tqdm loop
         loop.set_postfix(loss=batch_loss)
 
+        #TODO: Garbage Collection --> Free MEM
+        del x, y, yhat
+
     # add the loss (of this epoch) to metrics
     metrics["loss"] = epoch_loss_cum
 
@@ -164,8 +171,7 @@ def evaluate_fn(
     num_batches = sum(1 for _, _ in loader)
     epoch_val_loss_cum = 0
 
-    # TODO: why this line?
-    # probab to set training=False, so do only forward
+    # Tell model we are in evaluation mode
     model.eval()
 
     # TODO: do validation_fn in mini_batch style for more vectorization (it seems to predict one example at a time)
@@ -196,6 +202,9 @@ def evaluate_fn(
                 if eval_fn := metrics_fn.get(key):
                     metrics[key] += eval_fn(yhat, y).item()
 
+            #TODO: Garbage Collection --> Free MEM
+            del x, y, yhat
+
     # add the val_loss (of this epoch) to metrics
     metrics["loss"] = epoch_val_loss_cum
 
@@ -203,8 +212,8 @@ def evaluate_fn(
         # divide all metrics by the #steps/batches
         metrics[key] /= num_batches
 
-    # TODO: why this line?
-    # probab to set training=True (to continue training in next epoch)
+    # Tell the model to return to train mode
+    # not nece as we have used it in train_fn (but doesn't hurt)
     model.train()
 
     return metrics
@@ -255,7 +264,7 @@ def predict_fn(
             yield x, y, yhat
 
     # set training=True (to continue training in next epoch)
-    model.train()
+    # model.train()
 
 # TODO: create a class with fit(), evaluate(), predict() methods
 class BinarySegmentationModel(nn.Module):
@@ -479,7 +488,12 @@ def fit_fn(
     plt.xlabel('Epochs')
     plt.ylabel('lr_rate')
     plt.show()
+    del lr_list
     #TODO: when converted training_loop as a nn.Module class, then use self.lr_list = lr_list
+
+    #TODO: Clean up MEM as we don't need the data in the MEM but the history
+    del scheduler
+    del optimizer
 
     return history
 
