@@ -121,13 +121,14 @@ def train_fn(
             # calc the loss
             loss = loss_fn(yhat, y)
 
+        #TODO: I think the if part is redundant, as we can iterate of metrics_fn, to begin with.
         # calc train metrics for this mini_batch
         for key in metrics:
             if eval_fn := metrics_fn.get(key):
                 metrics[key] += eval_fn(yhat, y).item()
 
         # backprop
-        # init all grads az zero/0
+        # Reset grads to zero/0 (from previous batches/epochs)
         optimizer.zero_grad()
         # calc grads + use scaler to prevent underflow
         scaler.scale(loss).backward()
@@ -196,6 +197,7 @@ def evaluate_fn(
                 batch_val_loss = loss.item()
                 epoch_val_loss_cum += batch_val_loss
 
+            #TODO: I think the if part is redundant, as we can iterate of metrics_fn, to begin with.
             # calc val metrics for this mini_batch
             for key in metrics:
                 # used split() to remove 'val_' part of key
