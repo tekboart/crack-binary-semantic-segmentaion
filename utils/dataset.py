@@ -126,7 +126,7 @@ def get_loaders(
     train_ds: Dataset = None,
     val_ds: Dataset = None,
     test_ds: Dataset = None,
-    batch_size: int = 16,
+    batch_size: int = 8,
     num_workers: int = 4,
     pin_memory: bool = True,
     worker_init_fn=None,
@@ -183,15 +183,9 @@ def get_loaders(
     else:
         test_dataloader = None
 
-    # just return the loaders that are non-empty
-    data_loaders = [
-        loader
-        for loader in (train_dataloader, val_dataloader, test_dataloader)
-        if loader is not None
-    ]
+    data_loaders = filter(lambda x: x is not None, (train_dataloader, val_dataloader, test_dataloader))
 
-    return train_dataloader, val_dataloader, test_dataloader
-    # return data_loaders
+    return data_loaders
 
 
 ###############################################################################
