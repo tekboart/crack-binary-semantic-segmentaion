@@ -545,6 +545,9 @@ def fit_fn(
     del scheduler
     del optimizer
 
+    # Close the Tensorboard's writer obj
+    writer.close()
+
     return history
 
 ###############################################################################
