@@ -392,7 +392,7 @@ def fit_fn(
         # used reversed() to make 'loss' the first item
         for key, value in reversed(train_metrics.items()):
             if key == "loss":
-                if verbose
+                if verbose:
                     print(f"{key+':':<20} {value:<10.6f}")
             else:
                 if verbose:
