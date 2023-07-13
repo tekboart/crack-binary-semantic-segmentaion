@@ -4,6 +4,8 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
 from tqdm import tqdm
 from typing import Union
+# Ray Tune
+from ray import air
 
 
 def save_checkpoint(
@@ -320,6 +322,8 @@ def fit_fn(
     val_loader=None,
     epochs: int = 5,
     device: str = "cuda:0",
+    verbose: bool = True,
+    ray_tune: bool = True,
     save_model: bool = False,
     save_model_filename: str = None,
     save_model_temp: bool = False,
@@ -388,9 +392,11 @@ def fit_fn(
         # used reversed() to make 'loss' the first item
         for key, value in reversed(train_metrics.items()):
             if key == "loss":
-                print(f"{key+':':<20} {value:<10.6f}")
+                if verbose
+                    print(f"{key+':':<20} {value:<10.6f}")
             else:
-                print(f"{key+':':<20} {value:<10.2f}")
+                if verbose:
+                    print(f"{key+':':<20} {value:<10.2f}")
             history[key].append(value)
 
         # validation phase
@@ -415,10 +421,12 @@ def fit_fn(
             # for key, value in reversed(val_metrics.items()):
             for key, value in reversed(temp_val_metric_list.items()):
                 if key == "val_loss":
-                    # plot loss with more decimal points
-                    print(f"{key+':':<20} {value:<10.6f}")
+                    if verbose:
+                        # plot loss with more decimal points
+                        print(f"{key+':':<20} {value:<10.6f}")
                 else:
-                    print(f"{key+':':<20} {value:<10.2f}")
+                    if verbose:
+                        print(f"{key+':':<20} {value:<10.2f}")
                 history[key].append(value)
 
         # scheduler.step should be called after validation phase
@@ -437,7 +445,7 @@ def fit_fn(
             # lr_now = scheduler.get_last_lr()
             lr_list.append(lr_now)
             # print if the lr has been changed/decayed
-            if lr_list[-1] != lr_list[-2]:
+            if lr_list[-1] != lr_list[-2] and verbose:
                 print(f'\n>>> lr_rate was decayed to: {lr_now:f}\n')
 
         #TODO: my method is caveman: use below link to use import tempdir
@@ -468,40 +476,59 @@ def fit_fn(
             del checkpoint_temp
 
     # save the trained model
-    #TODO: Load the best performance model (through all epochs)
+    #TODO: Load the best performing model (through all epochs)
     # use pytorch Transfer learning tutorial for examples
-    if save_model:
-        checkpoint = {
-            "model_state_dict": model.state_dict(),
+    # if using ray_tune we save the checkpoint using ray.air.Checkpoint
+    if not ray_tune:
+        if save_model:
+            checkpoint = {
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+            }
+
+            save_checkpoint(
+                checkpoint,
+                filename=save_model_filename,
+                verbose=verbose,
+            )
+            del checkpoint
+
+    #TODO: save the lr_rate list (for all epochs + 1 (initial lr_rate) )
+    #TODO: How? as we cannot make it part of history nor output it alongside history!!!
+    #TODO: when converted training_loop as a nn.Module class, then use self.lr_list = lr_list
+    if verbose:
+        plt.plot(lr_list)
+        plt.yscale('log')
+        plt.title('lr_rate Scheduling')
+        plt.xlabel('Epochs')
+        plt.ylabel('lr_rate')
+        plt.show()
+    del lr_list
+
+    #TODO: When made it a class, use self.ray_tune and a def _ray_tune() then call self._ray_tune() here
+    if ray_tune:
+        # Create a checkpoint --> return the best model after hyperparam search
+        checkpoint_data = {
+            "epoch": epoch,
+            "net_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
         }
+        checkpoint_ray = air.Checkpoint.from_dict(checkpoint_data)
 
-        save_checkpoint(
-            checkpoint,
-            filename=save_model_filename,
-            verbose=True,
+        # keep only the val set metrics (as we want to find hyperparams based on these)
+        history_val = {key:value for key, value in history.items() if "val" in key}
+        # report the val metrics to the ray tune (through ray.air.session)
+        air.session.report(
+            history_val,
+            checkpoint=checkpoint_ray,
         )
-        del checkpoint
-
-    # save the lr_rate list (for all epochs + 1 (initial lr_rate) )
-    plt.plot(lr_list)
-    plt.yscale('log')
-    plt.title('lr_rate Scheduling')
-    plt.xlabel('Epochs')
-    plt.ylabel('lr_rate')
-    plt.show()
-    del lr_list
-    #TODO: when converted training_loop as a nn.Module class, then use self.lr_list = lr_list
 
     #TODO: Clean up MEM as we don't need the data in the MEM but the history
+    #TODO: but waht if I wan't to use the info in scheduler or optimizer later on???
     del scheduler
     del optimizer
 
     return history
-
-
-# TODO: write a BinarySegmentLightning class for pytorch-lightning train, eval, inference
-
 
 ###############################################################################
 # For testing
