@@ -424,7 +424,7 @@ class JaccardBinarySegment(nn.Module):
 class DiceBCELoss(nn.Module):
     def __init__(self, from_logits, weight=None, size_average=True):
         super().__init__()
-        self.from_logit = from_logits
+        self.from_logits = from_logits
 
     def forward(self, preds, targets, smooth=1):
         # # comment out if your model contains a sigmoid or equivalent activation layer
@@ -445,7 +445,7 @@ class DiceBCELoss(nn.Module):
         else:
             BCE = F.binary_cross_entropy(preds, targets, reduction="mean")
 
-        dice_loss = 1- DiceBinarySegment(self.from_logits)
+        dice_loss = 1- DiceBinarySegment(from_logits=self.from_logits)(preds, targets)
 
         Dice_BCE = BCE + dice_loss
 
