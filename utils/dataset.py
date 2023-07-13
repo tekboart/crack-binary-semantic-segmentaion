@@ -123,9 +123,8 @@ class SegmentaionDataset(Dataset):
 
 
 def get_loaders(
-    train_ds: Dataset = None,
-    val_ds: Dataset = None,
-    test_ds: Dataset = None,
+    train_ds: Dataset,
+    val_ds: Dataset,
     batch_size: int = 8,
     num_workers: int = 4,
     pin_memory: bool = True,
@@ -144,48 +143,27 @@ def get_loaders(
     list
         The #loaders in the output depends on which of the train_ds, val_ds, or test_ds were provided in input.
     """
-    if train_ds:
-        train_dataloader = DataLoader(
-            train_ds,
-            batch_size=batch_size,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            shuffle=True,
-            worker_init_fn=worker_init_fn,
-            generator=generator,
-        )
-    else:
-        train_dataloader = None
+    train_dataloader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        shuffle=True,
+        worker_init_fn=worker_init_fn,
+        generator=generator,
+    )
 
-    if val_ds:
-        val_dataloader = DataLoader(
-            val_ds,
-            batch_size=batch_size,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            shuffle=False,
-            worker_init_fn=worker_init_fn,
-            generator=generator,
-        )
-    else:
-        val_dataloader = None
+    val_dataloader = DataLoader(
+        val_ds,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        shuffle=False,
+        worker_init_fn=worker_init_fn,
+        generator=generator,
+    )
 
-    if test_ds:
-        test_dataloader = DataLoader(
-            test_ds,
-            batch_size=batch_size,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            shuffle=False,
-            worker_init_fn=worker_init_fn,
-            generator=generator,
-        )
-    else:
-        test_dataloader = None
-
-    data_loaders = filter(lambda x: x is not None, (train_dataloader, val_dataloader, test_dataloader))
-
-    return data_loaders
+    return train_dataloader, val_dataloader
 
 
 ###############################################################################
