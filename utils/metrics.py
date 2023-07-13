@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from torchmetrics.metric import Metric
 
 # make this class a subset of torchmetrics.metric.Metric
@@ -6,6 +7,7 @@ from torchmetrics.metric import Metric
 import torch.nn as nn
 
 
+# -------------------------- Metrics ---------------------------------------
 class BasicMetricsBinarySegment(nn.Module):
     """
     Calculate the binary metrics () for binary segmentation
@@ -203,7 +205,7 @@ class F1BinarySegment(nn.Module):
         # f1_score = tp / (tp + (0.5 * (fp + fn)))
 
         # formula 2: 100% works
-        f1_score = (2*tp) / (2*tp + fp + fn)
+        f1_score = (2 * tp) / (2 * tp + fp + fn)
 
         return f1_score
 
@@ -415,6 +417,39 @@ class JaccardBinarySegment(nn.Module):
         jaccard = (intersection + self.smooth) / (union + self.smooth)
 
         return jaccard
+
+
+# -------------------------- Losses ---------------------------------------
+
+class DiceBCELoss(nn.Module):
+    def __init__(self, from_logits, weight=None, size_average=True):
+        super().__init__()
+        self.from_logit = from_logits
+
+    def forward(self, preds, targets, smooth=1):
+        # # comment out if your model contains a sigmoid or equivalent activation layer
+        # inputs = torch.sigmoid(inputs)
+
+        # # flatten label and prediction tensors
+        # inputs = inputs.view(-1)
+        # targets = targets.view(-1)
+
+        # intersection = (inputs * targets).sum()
+
+        # dice_loss = 1 - (2.0 * intersection + smooth) / (
+        #     inputs.sum() + targets.sum() + smooth
+        # )
+
+        if self.from_logits:
+            BCE = F.binary_cross_entropy_with_logits(preds, targets, reduce="mean")
+        else:
+            BCE = F.binary_cross_entropy(preds, targets, reduction="mean")
+
+        dice_loss = 1- DiceBinarySegment(self.from_logits)
+
+        Dice_BCE = BCE + dice_loss
+
+        return Dice_BCE
 
 
 ###############################################################################
