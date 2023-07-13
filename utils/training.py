@@ -2,10 +2,15 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from typing import Union
 # Ray Tune
-from ray import air
+#NOTE: This import must be exactly like this
+# all the below attempt, weiredly, lead to an error:
+# import ray --> ray.air.session.report()
+# from ray import air --> air.session.report()
+from ray.air import Checkpoint, session
 
 
 def save_checkpoint(
@@ -158,7 +163,7 @@ def train_fn(
     return metrics
 
 
-# TODO: This should work standalone (for evaluation of test data)
+#TODO: This should work standalone (for evaluation of test data)
 def evaluate_fn(
     loader,
     model,
@@ -177,7 +182,6 @@ def evaluate_fn(
     # Tell model we are in evaluation mode
     model.eval()
 
-    # TODO: do validation_fn in mini_batch style for more vectorization (it seems to predict one example at a time)
     # Don't cache values for backprop (ME)
     with torch.no_grad():
         for x, y in loader:
@@ -222,7 +226,7 @@ def evaluate_fn(
 
     return metrics
 
-# TODO: This should work standalone (for evaluation of test data)
+# TODO: This should work standalone (for prediction of unseen data)
 def predict_fn(
     loader,
     model,
@@ -265,12 +269,16 @@ def predict_fn(
                 yhat = (yhat >= thresh).float()
 
 
+            #FIXME: When/Where should I "del x, y, yhat"?
+            # After runing predict() the GPU VRAM will not get released (but .fit_fn() does it)
+            # Since it's a Gen, then uses laze calc, so must do it carefuly
             yield x, y, yhat
 
     # set training=True (to continue training in next epoch)
     # model.train()
 
 # TODO: create a class with fit(), evaluate(), predict() methods
+#BUG: Should if have "Binary" part? I can extend it to multi-class
 class BinarySegmentationModel(nn.Module):
     """
     A Class model to do train, evaluation, & predict (like keras models).
@@ -312,6 +320,9 @@ class BinarySegmentationModel(nn.Module):
         self.metrics_fn = metrics_fn
 
 
+#FIXME: The Tensorboard only works on Training (aka .fit(..))
+# When wan't to .evaluate() or .predict() it does nothing.
+# Actually for .predict_fn() it's very trivial to make it working but .evaluate_fn() not sure
 def fit_fn(
     model,
     train_loader,
@@ -337,7 +348,6 @@ def fit_fn(
     """
     #TODO: Make sure everything works
     # Writer will output to ./runs/ directory by default
-    from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter()
 
     # TODO: add the needed hyperparameters (e.g., lr_decay_step) as args to this func (is more versatile)
@@ -530,12 +540,14 @@ def fit_fn(
             "net_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
         }
-        checkpoint_ray = air.Checkpoint.from_dict(checkpoint_data)
+        checkpoint_ray = Checkpoint.from_dict(checkpoint_data)
 
         # keep only the val set metrics (as we want to find hyperparams based on these)
         history_val = {key:value for key, value in history.items() if "val" in key}
-        # report the val metrics to the ray tune (through ray.air.session)
-        air.session.report(
+        # report only the val metrics to the ray tune (through ray.air.session)
+        #BUG: AttributeError: module 'ray.air' has no attribute 'session'
+        # reporting intermediate val metrics and (optionally) checkpoint for this model.fit()
+        session.report(
             history_val,
             checkpoint=checkpoint_ray,
         )
@@ -554,4 +566,5 @@ def fit_fn(
 # For testing
 ###############################################################################
 if __name__ == "__main__":
-    pass
+    # pass
+    session.report.__class__
