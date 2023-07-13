@@ -323,7 +323,8 @@ def fit_fn(
     epochs: int = 5,
     device: str = "cuda:0",
     verbose: bool = True,
-    ray_tune: bool = True,
+    tensorboard: bool = True,
+    ray_tune: bool = False,
     save_model: bool = False,
     save_model_filename: str = None,
     save_model_temp: bool = False,
@@ -334,6 +335,11 @@ def fit_fn(
     """
     Do the training for several epoch (written in pure PyTorch)
     """
+    #TODO: Make sure everything works
+    # Writer will output to ./runs/ directory by default
+    from torch.utils.tensorboard import SummaryWriter
+    writer = SummaryWriter()
+
     # TODO: add the needed hyperparameters (e.g., lr_decay_step) as args to this func (is more versatile)
     model = model.to(device)
 
@@ -397,7 +403,11 @@ def fit_fn(
             else:
                 if verbose:
                     print(f"{key+':':<20} {value:<10.2f}")
+            # add the train metrics to the history dict (to be returned later on)
             history[key].append(value)
+            # add the metrics to tensorboard
+            if tensorboard:
+                writer.add_scalar(tag=key + '/train', scalar_value=value, global_step=epoch)
 
         # validation phase
         if val_loader:
@@ -427,7 +437,14 @@ def fit_fn(
                 else:
                     if verbose:
                         print(f"{key+':':<20} {value:<10.2f}")
+                # add the val metrics to the history dict (to be returned later on)
                 history[key].append(value)
+                # add the metrics to tensorboard
+                if tensorboard:
+                    # remove the 'val_' part to allow tensorboard to group the metric for both train/val
+                    assert key.count("_") == 1, "The loss metrics should include only one underscore (e.g., val_loss)"
+                    key_bare = key.split("_")[1]
+                    writer.add_scalar(tag=key_bare + '/val', scalar_value=value, global_step=epoch)
 
         # scheduler.step should be called after validation phase
         # to have access to the val set metrics (e.g., val_loss)
