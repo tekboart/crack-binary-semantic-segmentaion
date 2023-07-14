@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
+import numpy as np
 from tqdm import tqdm
 from typing import Union
 # Ray Tune
@@ -435,6 +436,7 @@ def fit_fn(
                 device,
             )
 
+            #FIXME: Too many indentations --> Use helper fns to print metrics
             # plot the validation metrics
             # add 'val_' prefix to the metrics
             temp_val_metric_list = {f"val_{key}":value for key, value in val_metrics.items()}
@@ -452,7 +454,7 @@ def fit_fn(
                 # add the metrics to tensorboard
                 if tensorboard:
                     # remove the 'val_' part to allow tensorboard to group the metric for both train/val
-                    assert key.count("_") == 1, "The loss metrics should include only one underscore (e.g., val_loss)"
+                    assert key.count("_") == 1, "The loss metrics should include only one underscore in their name (e.g., val_loss)"
                     key_bare = key.split("_")[1]
                     writer.add_scalar(tag=key_bare + '/val', scalar_value=value, global_step=epoch)
 
@@ -543,7 +545,8 @@ def fit_fn(
         checkpoint_ray = Checkpoint.from_dict(checkpoint_data)
 
         # keep only the val set metrics (as we want to find hyperparams based on these)
-        history_val = {key:value for key, value in history.items() if "val" in key}
+        #NOTE: the value must be a float (the last calculated metric's value)
+        history_val = {key:value[-1] for key, value in history.items() if "val" in key}
         # report only the val metrics to the ray tune (through ray.air.session)
         #BUG: AttributeError: module 'ray.air' has no attribute 'session'
         # reporting intermediate val metrics and (optionally) checkpoint for this model.fit()
