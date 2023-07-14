@@ -19,5 +19,5 @@ segmentation-models-pytorch==0.3.3
 monai==1.2.0
 tensorflow
 ray==2.5.1
-"ray[tune]"
+ray[tune]
 optuna==3.2.0
