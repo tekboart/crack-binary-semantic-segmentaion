@@ -414,7 +414,7 @@ def fit_fn(
                     print(f"{key+':':<20} {value:<10.6f}")
             else:
                 if verbose:
-                    print(f"{key+':':<20} {value:<10.2f}")
+                    print(f"{key+':':<20} {value:<10.2%}")
             # add the train metrics to the history dict (to be returned later on)
             history[key].append(value)
             # add the metrics to tensorboard
@@ -449,7 +449,7 @@ def fit_fn(
                         print(f"{key+':':<20} {value:<10.6f}")
                 else:
                     if verbose:
-                        print(f"{key+':':<20} {value:<10.2f}")
+                        print(f"{key+':':<20} {value:<10.2%}")
                 # add the val metrics to the history dict (to be returned later on)
                 history[key].append(value)
                 # add the metrics to tensorboard
