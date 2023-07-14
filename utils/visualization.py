@@ -263,7 +263,7 @@ def image_mask_plot(
 
 
 def plot_metrics(
-    history: dict, epochs: int, metrics: list = ["loss"], auc_min: float = 0.8
+    history: dict, epochs: int, metrics: list = ["loss"], auc_min: float = 0.8, y_scale: str = 'linear'
 ) -> None:
     """
     Plot the metrics (for both the train and val)
@@ -302,20 +302,25 @@ def plot_metrics(
         )
         plt.xlabel("Epoch")
         plt.ylabel(name)
+
+        # Set the scale
+        plt.yscale(y_scale)
+
+        # Show only the relevant range
         if metric == "loss":
             plt.ylim([0, plt.ylim()[1]])
-        elif metric == "auc":
-            plt.ylim([auc_min, 1])
         else:
-            plt.ylim([0, 1])
+            min_metric = int(min(history[metric]))
+            max_metric = int(max(history[metric]))
+            plt.ylim([min_metric, max_metric])
 
         plt.legend()
         plt.tight_layout()
 
 
-def plot_metrics_finetune(history, history_finetune, metrics: list = ["loss"]):
+def plot_metrics_finetune(history, history_finetune, metrics: list = ["loss"], y_scale: str = 'linear'):
     """
-    #TODO: fix docstring
+    #TODO: Complete docstring
 
     args:
         history: the output of original model.fit()
@@ -377,6 +382,8 @@ def plot_metrics_finetune(history, history_finetune, metrics: list = ["loss"]):
         )
         plt.xlabel("Epoch")
         plt.ylabel(name)
+        plt.yscale(y_scale)
+
         if metric == "loss":
             plt.ylim([0, plt.ylim()[1]])
         elif metric == "auc":
