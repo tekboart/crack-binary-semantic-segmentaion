@@ -337,6 +337,7 @@ def fit_fn(
     verbose: bool = True,
     tensorboard: bool = True,
     ray_tune: bool = False,
+    ray_tune_checkpoint: bool = False,
     save_model: bool = False,
     save_model_filename: str = None,
     save_model_temp: bool = False,
@@ -458,6 +459,23 @@ def fit_fn(
                     key_bare = key.split("_")[1]
                     writer.add_scalar(tag=key_bare + '/val', scalar_value=value, global_step=epoch)
 
+            #TODO: When made it a class, use self.ray_tune and a def _ray_tune() then call self._ray_tune() here
+            if ray_tune:
+                # Create a checkpoint --> return the best model after hyperparam search
+                checkpoint_data = {
+                    "epoch": epoch,
+                    "net_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                }
+                checkpoint_ray = Checkpoint.from_dict(checkpoint_data)
+
+                # report only the val metrics (as a float) to the ray tune (through ray.air.session)
+                session.report(
+                    temp_val_metric_list,
+                    checkpoint=checkpoint_ray if ray_tune_checkpoint else None,
+                )
+                del checkpoint_ray
+
         # scheduler.step should be called after validation phase
         # to have access to the val set metrics (e.g., val_loss)
         if scheduler:
@@ -507,20 +525,18 @@ def fit_fn(
     # save the trained model
     #TODO: Load the best performing model (through all epochs)
     # use pytorch Transfer learning tutorial for examples
-    # if using ray_tune we save the checkpoint using ray.air.Checkpoint
-    if not ray_tune:
-        if save_model:
-            checkpoint = {
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-            }
+    if save_model:
+        checkpoint = {
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+        }
 
-            save_checkpoint(
-                checkpoint,
-                filename=save_model_filename,
-                verbose=verbose,
-            )
-            del checkpoint
+        save_checkpoint(
+            checkpoint,
+            filename=save_model_filename,
+            verbose=verbose,
+        )
+        del checkpoint
 
     #TODO: save the lr_rate list (for all epochs + 1 (initial lr_rate) )
     #TODO: How? as we cannot make it part of history nor output it alongside history!!!
@@ -533,27 +549,6 @@ def fit_fn(
         plt.ylabel('lr_rate')
         plt.show()
     del lr_list
-
-    #TODO: When made it a class, use self.ray_tune and a def _ray_tune() then call self._ray_tune() here
-    if ray_tune:
-        # Create a checkpoint --> return the best model after hyperparam search
-        checkpoint_data = {
-            "epoch": epoch,
-            "net_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-        }
-        checkpoint_ray = Checkpoint.from_dict(checkpoint_data)
-
-        # keep only the val set metrics (as we want to find hyperparams based on these)
-        #NOTE: the value must be a float (the last calculated metric's value)
-        history_val = {key:value[-1] for key, value in history.items() if "val" in key}
-        # report only the val metrics to the ray tune (through ray.air.session)
-        #BUG: AttributeError: module 'ray.air' has no attribute 'session'
-        # reporting intermediate val metrics and (optionally) checkpoint for this model.fit()
-        session.report(
-            history_val,
-            checkpoint=checkpoint_ray,
-        )
 
     #TODO: Clean up MEM as we don't need the data in the MEM but the history
     #TODO: but waht if I wan't to use the info in scheduler or optimizer later on???
