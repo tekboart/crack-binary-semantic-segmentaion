@@ -48,6 +48,7 @@
 ![Pandas](https://img.shields.io/badge/pandas-svg?style=flat&color=150458&logo=pandas&logoColor=white&labelColor=gray)
 ![Matplotlib](https://img.shields.io/badge/Matplotlib-svg?style=flat&color=65BAEA&label=&logoColor=white&labelColor=gray)
 ![PIL](https://img.shields.io/badge/Pillow-svg?style=flat&color=yellow&label=PIL&logoColor=white&labelColor=gray)
+![Ray_Tune](https://img.shields.io/badge/Ray_Tune-svg?style=flat&color=028CF0&logo=ray&logoColor=white&labelColor=gray)
 
 
 
