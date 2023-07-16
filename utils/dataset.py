@@ -71,6 +71,9 @@ class SegmentaionDataset(Dataset):
         img_path = os.path.join(self.image_dir, self.images[idx])
         mask_path = os.path.join(
             self.mask_dir,
+            #FIXME: use Regex to get the name of mask images
+            # for an image like 23432.jpg.jpg it would cause an error but with Regex it will work
+            # pattern (not tested): r".+\.(P<ext>\w+)\b)""
             self.images[idx].replace(
                 f".{self.img_ext}", f"{self.mask_suffix}.{self.mask_ext}"
             ),
@@ -79,9 +82,15 @@ class SegmentaionDataset(Dataset):
         # TODO: why we define each element in channels_last format??? for self.transform
         image = np.array(Image.open(img_path).convert("RGB"))
         mask = np.array(Image.open(mask_path).convert("L"), dtype=np.float32)
+
         if self.num_classes == 1:
             # make the mask binary (float) (needed for sigmoid/softmax)
-            mask = np.where(mask == 255.0, 1.0, mask)
+            # method 1: doesn't work if the mask's pixel are not 0/255 or 0/1
+            # *** e.g., the Kaggle Crack Segmentation Dataset's masks were not binary
+            # np.unique(<a_mask>) = array([0, 1, 2, 3, 4, 5, 6, 7, 248, 249, 250, 251, 252, 253, 254, 255], dtype=uint8)
+            # mask = np.where(mask == 255.0, 1.0, mask)
+            # method 2: is robust
+            mask = np.where(mask == 0.0, 0.0, 1.0)
             # make the mask a 3DTensor: (H, W) --> (H, W, C=1)
             mask = np.expand_dims(mask, -1)
         elif self.num_classes > 1:
