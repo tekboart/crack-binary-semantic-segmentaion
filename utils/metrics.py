@@ -97,7 +97,7 @@ class PrecisionBinarySegment(nn.Module):
             self.from_logits, thresh=self.thresh
         )(preds, targets)
 
-        precision = tp / (tp + fp)
+        precision = tp / (tp + fp + self.smooth)
 
         return precision
 
@@ -141,7 +141,7 @@ class RecallBinarySegment(nn.Module):
             self.from_logits, thresh=self.thresh
         )(preds, targets)
 
-        recall = tp / (tp + fn)
+        recall = tp / (tp + fn + self.smooth)
 
         return recall
 
@@ -205,7 +205,7 @@ class F1BinarySegment(nn.Module):
         # f1_score = tp / (tp + (0.5 * (fp + fn)))
 
         # formula 2: 100% works
-        f1_score = (2 * tp) / (2 * tp + fp + fn)
+        f1_score = (2 * tp) / (2 * tp + fp + fn + self.smooth)
 
         return f1_score
 
@@ -253,7 +253,7 @@ class AccuracyBinarySegment(nn.Module):
         #     preds, targets
         # )
 
-        accuracy = (tp + tn) / (tp + fn + tn + fp)
+        accuracy = (tp + tn) / (tp + fn + tn + fp + self.smooth)
 
         return accuracy
 
