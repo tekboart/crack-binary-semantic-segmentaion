@@ -249,6 +249,9 @@ def predict_fn(
     """
     # training=False (for layers, dropout, batchnorm, etc.)
     model.eval()
+    image_batch_list = []
+    mask_batch_list = []
+    pred_batch_list = []
 
     # Don't cache values for backprop (ME)
     with torch.no_grad():
@@ -273,10 +276,13 @@ def predict_fn(
             #FIXME: When/Where should I "del x, y, yhat"?
             # After runing predict() the GPU VRAM will not get released (but .fit_fn() does it)
             # Since it's a Gen, then uses laze calc, so must do it carefuly
-            yield x, y, yhat
+            image_batch_list.append(x)
+            mask_batch_list.append(y)
+            pred_batch_list.append(yhat)
 
     # set training=True (to continue training in next epoch)
     # model.train()
+    return image_batch_list, mask_batch_list, pred_batch_list
 
 # TODO: create a class with fit(), evaluate(), predict() methods
 #BUG: Should if have "Binary" part? I can extend it to multi-class
