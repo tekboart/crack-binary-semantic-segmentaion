@@ -18,6 +18,7 @@ traindata/
 valdata/
 testdata/
 training_set/
+kaggle/
 
 # the temp dir
 temp/
