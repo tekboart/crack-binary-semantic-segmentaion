@@ -2,6 +2,8 @@ import torch
 from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
+from math import floor, ceil
+from random import randint
 
 # Type Hinting
 from typing import Union, Optional, TypeAlias
@@ -210,6 +212,7 @@ def image_mask_plot(
     titles: list = ["image", "mask (target)", "mask (predict)"],
     plot_axes: bool = False,
     anti_standardize_fn=None,
+    shuffle: bool = True,
 ):
     """
     plot image, mask pairs of a given batch of data.
@@ -227,9 +230,12 @@ def image_mask_plot(
     anti_standardize_fn: bool
         if the input image (the first elem of batch_list) was standardized/normalized (e.g., by z-score), then give us the anti_fn to reverse it.
         The resulting image must be in range of either [0, 1] (float) or [0, 255] (int)
+    shuffle: bool
+        Should take image by order or by random.
     """
-    batch_list = list(batch_list)
+    batch_list = list(batch_list)  # make sure it's a list
     num_cols = len(batch_list)
+    num_recs = batch_list[0].shape[0]
 
     # convert batch_tensors to ndarray + make it channels_last
     for i in range(num_cols):
@@ -237,14 +243,30 @@ def image_mask_plot(
             batch_list[i], data_format
         )
 
+    # used, to avoid plotting repeated images
+    used_indices = []
+
     # plot img, mask (side-by-side)
     fig, axes = plt.subplots(num_rows, num_cols, figsize=(num_cols * 4, num_rows * 4))
     # make the axes a 2darray (in case num_rows=1, hence axes is 1darray)
     if axes.ndim == 1:
         axes = np.expand_dims(axes, 0)
+
     for row_idx in range(num_rows):
+
+        if shuffle:
+            # get a random index of images
+            img_idx = randint(0, num_recs - 1)
+            # generate a new img_indx until it's unique
+            while img_idx in used_indices:
+                img_idx = randint(0, num_recs - 1)
+            # add the unique img_idx to used_indices
+            used_indices.append(img_idx)
+        else:
+            img_idx = row_idx
+
         for col_idx in range(num_cols):
-            img = batch_list[col_idx][row_idx]
+            img = batch_list[col_idx][img_idx]
 
             # different setting for target_masks
             if col_idx in [1, 2] and img.shape[-1] == 1:
@@ -263,7 +285,11 @@ def image_mask_plot(
 
 
 def plot_metrics(
-    history: dict, epochs: int, metrics: list = ["loss"], auc_min: float = 0.8, y_scale: str = 'linear'
+    history: dict,
+    metrics: list[str] = ["loss"],
+    y_scale: str = "linear",
+    x_interval: int = 5,
+    crop_yaxis: bool = True,
 ) -> None:
     """
     Plot the metrics (for both the train and val)
@@ -272,18 +298,31 @@ def plot_metrics(
     ----------
     history: dict
         the output of model.fit()
-    epochs: int
-        the #epochs we trained the model
-    metrics: list
-        a list of metrics to be plotted
-    auc_min: 0.8
-        as we need to zoom-in more for AUC curve, we use this to limit the range
+    metrics: list[str]
+        a list of metrics to be plotted.
+    y_scale: str
+        Define the scale of the y-axis. Possible values are 'linear', 'log', 'symlog', 'asinh', and 'logit'.
+    x_interval: int
+        Define the intervals between x-axis ticks.
+    crop_yaxis: bool
+        Whether to zoom-in the y-axis to show only the relevant areas.
 
     returns
     -------
     None
+        a multi plot of the performance of the model + a green line to differentiate before and after finetuning
+
+    Examples
+    --------
+    >>> plot_metrics(history, metrics_list, y_scale="linear", x_interval=5, crop_yaxis=True)
+    >>> plt.suptitle('both preliminary & finetune phases')
+    >>> plt.tight_layout()
+    >>> plt.show()
     """
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+    # calculate the #epochs
+    num_epochs = len(list(history.values())[0])
 
     plt.figure(figsize=(12, len(metrics) * 2))
     # take the ceiling of #metrics provided as the #rows
@@ -292,9 +331,8 @@ def plot_metrics(
     for i, metric in enumerate(metrics):
         name = metric.replace("_", " ").title()
         plt.subplot(plot_height, 2, i + 1)
-        plt.plot(range(1, epochs + 1), history[metric], color=colors[0], label="Train")
+        plt.plot(history[metric], color=colors[0], label="Train")
         plt.plot(
-            range(1, epochs + 1),
             history["val_" + metric],
             color=colors[1],
             linestyle="--",
@@ -307,29 +345,61 @@ def plot_metrics(
         plt.yscale(y_scale)
 
         # Show only the relevant range
-        if metric == "loss":
-            plt.ylim([0, plt.ylim()[1]])
+        if crop_yaxis:
+            # take the min value for each metric (considering both train an val)
+            min_metric = min(history[metric])
+            min_metric_val = min(history[f"val_{metric}"])
+            min_yaxis = min(min_metric, min_metric_val)
+            # take the max value for each metric (considering both train an val)
+            max_metric = max(history[metric])
+            max_metric_val = max(history[f"val_{metric}"])
+            max_yaxis = max(max_metric, max_metric_val)
+            # set the limit of y-axis
+            border = 0.05
+            plt.ylim([min_yaxis - border, max_yaxis + border])
         else:
-            min_metric = int(min(history[metric]))
-            max_metric = int(max(history[metric]))
-            plt.ylim([min_metric, max_metric])
+            if metric == "loss":
+                plt.ylim([0, plt.ylim()[1]])
+            else:
+                plt.ylim([0, 1])
+
+        # set the xaxis ticks
+        plt.xticks(range(0, num_epochs, x_interval))
 
         plt.legend()
         plt.tight_layout()
 
 
-def plot_metrics_finetune(history, history_finetune, metrics: list = ["loss"], y_scale: str = 'linear'):
+def plot_metrics_finetune(
+    history,
+    history_finetune,
+    metrics: list[str] = ["loss"],
+    y_scale: str = "linear",
+    crop_yaxis: bool = True,
+    x_interval: int = 5,
+):
     """
     #TODO: Complete docstring
 
-    args:
-        history: the output of original model.fit()
-        history_finetuen: the history of model after finetune (un-freezing layers)
-        metrics: a list of metrics to be plotted
+    Parameters
+    ----------
+    history: dict
+        the output of original model.fit()
+    history_finetuen: dict
+        the history of model after finetune (un-freezing layers)
+    metrics: list[str]
+        a list of metrics to be plotted.
+    y_scale: str
+        Define the scale of the y-axis. Possible values are 'linear', 'log', 'symlog', 'asinh', and 'logit'.
+    x_interval: int
+        Define the intervals between x-axis ticks.
+    crop_yaxis: bool
+        Whether to zoom-in the y-axis to show only the relevant areas.
 
-    returns:
+    returns
+    -------
+    None
         a multi plot of the performance of the model + a green line to differentiate before and after finetuning
-
 
     Examples
     --------
@@ -342,6 +412,11 @@ def plot_metrics_finetune(history, history_finetune, metrics: list = ["loss"], y
     >>> plt.show()
     """
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+    # calculate the #epochs
+    num_epochs_train = len(list(history.values())[0])
+    num_epochs_finetune = len(list(history_finetune.values())[0])
+    num_epochs = num_epochs_train + num_epochs_finetune
 
     # the #epochs for TL phase 1 (useful if use earlystoppage)
     num_epochs_train = len(history["loss"])
@@ -357,17 +432,14 @@ def plot_metrics_finetune(history, history_finetune, metrics: list = ["loss"], y
         # name = metric.replace("_", " ").capitalize()
         name = metric.replace("_", " ").title()
         plt.subplot(num_rows, 2, i + 1)
-        metric_train = history[metric] + history_finetune[metric]
-        metric_val = history["val_" + metric] + history_finetune["val_" + metric]
-        # epoch = history.epoch + history_finetune.epoch
-        epoch = num_epochs_train + num_epochs_finetune
+        history_train_total = history[metric] + history_finetune[metric]
+        history_val_total = history["val_" + metric] + history_finetune["val_" + metric]
         # plot the train metrics
-        plt.plot(range(1, epoch + 1), metric_train, color=colors[0], label="Train")
+        plt.plot(history_train_total, color=colors[0], label="Train")
         # plot the val metrics
         # plt.plot(range(1, epoch+1), metric_val, color=colors[1], linestyle="-", label="Val")
         plt.plot(
-            range(1, epoch + 1),
-            metric_val,
+            history_val_total,
             color=colors[1],
             linestyle="--",
             label="Val",
@@ -384,12 +456,26 @@ def plot_metrics_finetune(history, history_finetune, metrics: list = ["loss"], y
         plt.ylabel(name)
         plt.yscale(y_scale)
 
-        if metric == "loss":
-            plt.ylim([0, plt.ylim()[1]])
-        elif metric == "auc":
-            plt.ylim([0.8, 1])
+        if crop_yaxis:
+            # take the min value for each metric (considering both train an val)
+            min_metric = min(history_train_total)
+            min_metric_val = min(history_val_total)
+            min_yaxis = min(min_metric, min_metric_val)
+            # take the max value for each metric (considering both train an val)
+            max_metric = max(history_train_total)
+            max_metric_val = max(history_val_total)
+            max_yaxis = max(max_metric, max_metric_val)
+            # set the limit of y-axis
+            border = 0.05
+            plt.ylim([min_yaxis - border, max_yaxis + border])
         else:
-            plt.ylim([0, 1])
+            if metric == "loss":
+                plt.ylim([0, plt.ylim()[1]])
+            else:
+                plt.ylim([0, 1])
+
+        # set the xaxis ticks
+        plt.xticks(range(0, num_epochs, x_interval))
 
         plt.legend()
         plt.tight_layout()
