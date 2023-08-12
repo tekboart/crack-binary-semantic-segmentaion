@@ -4,7 +4,7 @@
       <img
         width="75%"
         style="border-radius: 20px;"
-        src="images/cover_temp.png"
+        src="images/20160222_164141 - visualization high quality.jpg"
       >
     </a>
   </p>
@@ -49,6 +49,15 @@
 ![Matplotlib](https://img.shields.io/badge/Matplotlib-svg?style=flat&color=65BAEA&label=&logoColor=white&labelColor=gray)
 ![PIL](https://img.shields.io/badge/Pillow-svg?style=flat&color=yellow&label=PIL&logoColor=white&labelColor=gray)
 ![Ray_Tune](https://img.shields.io/badge/Ray_Tune-svg?style=flat&color=028CF0&logo=ray&logoColor=white&labelColor=gray)
+
+
+## Description
+Used several semantic segmentation models (i.e., UNet++, FPN, DeepLabV3+) with different CNN encoders, pre-trained with 12M ImageNet dataset, to detect cracks in built environment images (e.g., bridges, infrastructures, pavement, etc.) with quite favorable results (See Figure [[1]](#1)).
+
+<p align="center">
+    <img width="90%" src="images/inference_testset_3.png">
+    <p align="center"><b>Fig <a id="1">[1]</a> :</b> A few sample inference results of the Test set images.</p>
+</p>
 
 
 
